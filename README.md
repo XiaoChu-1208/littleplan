@@ -93,6 +93,27 @@ A sleek floating desktop Gantt planner that lives on your screen. Drag to plan, 
 
 ---
 
+## 数据恢复（从旧版本迁移）
+
+如果你使用过早期版本（v1.0.0），升级后发现数据丢失，这是因为应用内部名称从 `great-plan` 更新为 `little-plan`，导致数据目录路径发生了变化。数据仍然保存在本地，可以一键恢复：
+
+**Windows 用户：**
+
+下载仓库中的 [`restore-plan-data.bat`](restore-plan-data.bat) 文件，双击运行，重启 Little Plan 即可找回数据。
+
+**macOS 用户：**
+
+在终端执行以下命令：
+
+```bash
+cp ~/Library/Application\ Support/great-plan/plan-data.json \
+   ~/Library/Application\ Support/little-plan/plan-data.json
+```
+
+重启 Little Plan 即可。
+
+---
+
 ## 开发者：本地运行
 
 ### 1. 安装依赖
