@@ -1213,17 +1213,6 @@ const App = () => {
           </button>
         </div>
 
-        {updateInfo && (
-          <button
-            onClick={() => window.electronAPI?.openExternal?.(updateInfo.url)}
-            className="ml-1 px-2 py-1 rounded-xl text-[10px] font-black text-white bg-red-500 hover:bg-red-600 transition-colors flex items-center gap-1 animate-pulse"
-            title={`新版本 ${updateInfo.version} 可用`}
-          >
-            <span className="w-1.5 h-1.5 rounded-full bg-white" />
-            {updateInfo.version}
-          </button>
-        )}
-
         <div className={`relative flex items-center ml-1 ${showSettings ? 'z-50' : 'z-10'}`}>
           <button onClick={() => { setShowSettings(!showSettings); setShowHelp(false); setShowPalette(false); setShowOpacity(false); setShowTheme(false); }} className={`${makeHudButtonClass(showSettings)} z-10 relative`} title="设置">
             <Settings2 className="w-4 h-4" />
@@ -1387,7 +1376,17 @@ const App = () => {
                       <div>
                         <div className="flex items-baseline gap-2">
                           <h2 className={`text-lg font-bold tracking-tight ${C.textPrimary}`}>Little Plan</h2>
-                          {appMeta && <span className="px-1.5 py-0.5 rounded-md text-[9px] font-bold" style={{ backgroundColor: activeTheme.tint, color: activeTheme.color }}>v{appMeta.version}</span>}
+                          {updateInfo ? (
+                            <button
+                              onClick={() => window.electronAPI?.openExternal?.(updateInfo.url)}
+                              className="px-1.5 py-0.5 rounded-md text-[9px] font-bold text-white bg-red-500 animate-pulse hover:bg-red-600 transition-colors"
+                              title={`新版本 ${updateInfo.version} 可用，点击下载`}
+                            >
+                              {updateInfo.version}
+                            </button>
+                          ) : appMeta && (
+                            <span className="px-1.5 py-0.5 rounded-md text-[9px] font-bold" style={{ backgroundColor: activeTheme.tint, color: activeTheme.color }}>v{appMeta.version}</span>
+                          )}
                         </div>
                         <div className={`text-[11px] mt-0.5 ${C.textMuted}`}>By chizhu1208@163.com</div>
                       </div>
