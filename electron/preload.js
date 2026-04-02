@@ -23,4 +23,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getAppMeta: () => ipcRenderer.invoke('get-app-meta'),
   getLoginItemSettings: () => ipcRenderer.invoke('get-login-item-settings'),
   setLoginItem: (enable) => ipcRenderer.send('set-login-item', enable),
+  onUpdateAvailable: (callback) => {
+    ipcRenderer.on('update-available', (_, info) => callback(info));
+  },
+  openExternal: (url) => ipcRenderer.invoke('open-external', url),
 });

@@ -298,6 +298,32 @@ ipcMain.on('set-shortcut-config', (event, config) => {
   refreshAppMenu();
 });
 
+ipcMain.handle('open-external', (_, url) => {
+  shell.openExternal(url);
+});
+
+// --------------- Update Check ---------------
+
+async function checkForUpdates() {
+  try {
+    const res = await fetch('https://api.github.com/repos/XiaoChu-1208/littleplan/releases/latest', {
+      headers: { 'User-Agent': 'LittlePlan-App' }
+    });
+    if (!res.ok) return;
+    const data = await res.json();
+    const latestTag = data.tag_name; // e.g. "v1.1.0"
+    if (!latestTag) return;
+    const currentVersion = `v${app.getVersion()}`;
+    const normalize = (v) => v.replace(/^v/, '').split('.').map(Number);
+    const [lMaj, lMin, lPat] = normalize(latestTag);
+    const [cMaj, cMin, cPat] = normalize(currentVersion);
+    const isNewer = lMaj > cMaj || (lMaj === cMaj && lMin > cMin) || (lMaj === cMaj && lMin === cMin && lPat > cPat);
+    if (isNewer) {
+      mainWindow?.webContents.send('update-available', { version: latestTag, url: data.html_url });
+    }
+  } catch (_) { /* ignore network errors */ }
+}
+
 // --------------- Window Creation ---------------
 
 const isDev = process.env.ELECTRON_DEV === 'true';
@@ -357,6 +383,10 @@ function createWindow() {
   } else {
     mainWindow.loadFile(path.join(__dirname, '../dist/index.html'));
   }
+
+  mainWindow.webContents.once('did-finish-load', () => {
+    setTimeout(checkForUpdates, 3000);
+  });
 
   refreshAppMenu();
 

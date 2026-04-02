@@ -432,6 +432,7 @@ const App = () => {
   const [timelineOffset, setTimelineOffset] = useState(0);
   const [showHelp, setShowHelp] = useState(false);
   const [appMeta, setAppMeta] = useState(null);
+  const [updateInfo, setUpdateInfo] = useState(null);
   const [showPalette, setShowPalette] = useState(false);
   const [isWideMode, setIsWideMode] = useState(false);
   const [isNarrowMode, setIsNarrowMode] = useState(false);
@@ -602,6 +603,7 @@ const App = () => {
       dataLoaded.current = true;
     });
     window.electronAPI?.getAppMeta?.().then((m) => { if (m) setAppMeta(m); });
+    window.electronAPI?.onUpdateAvailable?.((info) => setUpdateInfo(info));
   }, []);
 
   const unifiedPastRef = useRef([]);
@@ -1212,8 +1214,9 @@ const App = () => {
         </div>
 
         <div className={`relative flex items-center ml-1 ${showSettings ? 'z-50' : 'z-10'}`}>
-          <button onClick={() => { setShowSettings(!showSettings); setShowHelp(false); setShowPalette(false); setShowOpacity(false); setShowTheme(false); }} className={`${makeHudButtonClass(showSettings)} z-10`} title="设置">
+          <button onClick={() => { setShowSettings(!showSettings); setShowHelp(false); setShowPalette(false); setShowOpacity(false); setShowTheme(false); }} className={`${makeHudButtonClass(showSettings)} z-10 relative`} title="设置">
             <Settings2 className="w-4 h-4" />
+            {updateInfo && <span className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-red-500 border border-white/60" />}
           </button>
           <div className={`absolute right-0 ${panelDir} transition-all duration-200 ${showSettings ? 'opacity-100 scale-100' : 'opacity-0 scale-95 pointer-events-none'}`}>
             <div data-popup-panel className={`w-[196px] rounded-2xl border p-2 space-y-1 ${C.borderStrong}`} style={{ backgroundColor: C.settingsBg(popupAlpha), boxShadow: C.popupShadow }}>
@@ -1241,6 +1244,15 @@ const App = () => {
                   <button onClick={() => { setShowHelp(true); setShowSettings(false); }} className={`rounded-xl border px-2 py-1 text-[10px] font-semibold ${C.borderPanel} ${C.btnInactive}`}>
                     帮助与关于
                   </button>
+                  {updateInfo && (
+                    <button
+                      onClick={() => window.electronAPI?.openExternal?.(updateInfo.url)}
+                      className="w-full mt-1 rounded-xl px-2 py-1.5 text-[10px] font-semibold text-white bg-red-500 hover:bg-red-600 transition-colors flex items-center justify-center gap-1"
+                    >
+                      <span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse" />
+                      新版本 {updateInfo.version} 可用，点击下载
+                    </button>
+                  )}
                 </div>
               </div>
             </div>
