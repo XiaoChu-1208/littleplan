@@ -1,0 +1,2029 @@
+import React, { useState, useMemo, useEffect, useRef, useCallback } from "react";
+import { motion } from "framer-motion";
+import { Scissors, MousePointer2, Plus, Trash2, Palette, PaintBucket, HelpCircle, X, Maximize, SunDim, Calendar, ListTodo, Circle, CheckCircle2 } from "lucide-react";
+
+const baseYear = 2026;
+const DEFAULT_BAR_COLOR = "rgba(0,0,0,0.4)";
+const ROW_HEIGHT_NARROW = 40;
+const ROW_HEIGHT_WIDE = 80;
+const HEADER_HEIGHT = 60;
+const ADD_ROW_HEIGHT = 32;
+const GANTT_PADDING = 48;
+const HUD_HEIGHT = 44;
+const CONTAINER_TOP = 8;
+
+const initialRows = [
+  { id: 1, title: "年度战略规划与执行", segments: [{ id: "1-1", name: "阶段一", start: 0.0, end: 12.0, color: DEFAULT_BAR_COLOR, isAcknowledged: false }] },
+  { id: 2, title: "核心产品V2.0研发", segments: [{ id: "2-1", name: "研发期", start: 1.0, end: 6.5, color: DEFAULT_BAR_COLOR, isAcknowledged: false }] },
+  { id: 3, title: "海外市场渠道拓展", segments: [{ id: "3-1", name: "出海", start: 5.5, end: 12.0, color: DEFAULT_BAR_COLOR, isAcknowledged: false }] },
+  { id: 4, title: "团队扩充与培训建设", segments: [{ id: "4-1", name: "招聘", start: -2.0, end: 1.5, color: DEFAULT_BAR_COLOR, isAcknowledged: false }] },
+  { id: 5, title: "年终总结与财报准备", segments: [{ id: "5-1", name: "筹备", start: 10.0, end: 12.0, color: DEFAULT_BAR_COLOR, isAcknowledged: false }] },
+];
+
+const presetColors = ["#ef4444", "#f97316", "#f59e0b", "#10b981", "#06b6d4", "#3b82f6", "#8b5cf6", "#a855f7", "#d946ef", "#f43f5e", "#64748b", "#334155"];
+
+const GLOBAL_THEMES = [
+  { id: 'amber', name: '黄', color: '#f59e0b', todayColor: '#fde68a', tint: 'rgba(245, 158, 11, 0.08)', highlight: 'bg-amber-500/30 text-amber-400', todayLine: 'bg-amber-200/80', todayBg: 'bg-amber-200/10', todayArrow: 'border-t-amber-200' },
+  { id: 'blue', name: '蓝', color: '#3b82f6', todayColor: '#bfdbfe', tint: 'rgba(59, 130, 246, 0.08)', highlight: 'bg-blue-500/30 text-blue-400', todayLine: 'bg-blue-200/80', todayBg: 'bg-blue-200/10', todayArrow: 'border-t-blue-200' },
+  { id: 'rose', name: '粉', color: '#f43f5e', todayColor: '#fecdd3', tint: 'rgba(244, 63, 94, 0.08)', highlight: 'bg-rose-500/30 text-rose-400', todayLine: 'bg-rose-200/80', todayBg: 'bg-rose-200/10', todayArrow: 'border-t-rose-200' },
+  { id: 'emerald', name: '绿', color: '#10b981', todayColor: '#a7f3d0', tint: 'rgba(16, 185, 129, 0.08)', highlight: 'bg-emerald-500/30 text-emerald-400', todayLine: 'bg-emerald-200/80', todayBg: 'bg-emerald-200/10', todayArrow: 'border-t-emerald-200' },
+  { id: 'fuchsia', name: '紫', color: '#d946ef', todayColor: '#f5d0fe', tint: 'rgba(217, 70, 239, 0.08)', highlight: 'bg-fuchsia-500/30 text-fuchsia-400', todayLine: 'bg-fuchsia-200/80', todayBg: 'bg-fuchsia-200/10', todayArrow: 'border-t-fuchsia-200' },
+  { id: 'sky', name: '天蓝', color: '#0ea5e9', todayColor: '#bae6fd', tint: 'rgba(14, 165, 233, 0.08)', highlight: 'bg-sky-500/30 text-sky-400', todayLine: 'bg-sky-200/80', todayBg: 'bg-sky-200/10', todayArrow: 'border-t-sky-200' },
+];
+
+const hexToRgba = (hex, alpha) => {
+  if (hex.startsWith('#') && hex.length === 7) {
+    let r = parseInt(hex.slice(1, 3), 16),
+        g = parseInt(hex.slice(3, 5), 16),
+        b = parseInt(hex.slice(5, 7), 16);
+    return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+  }
+  return hex;
+};
+
+const getVisualLength = (str) => {
+  let len = 0;
+  for (let i = 0; i < (str?.length || 0); i++) {
+    len += str.charCodeAt(i) > 255 ? 2 : 1.1;
+  }
+  return len;
+};
+
+const getProgressText = (p) => {
+  if (p === 0) return "尚未开始";
+  if (p <= 10) return "起步阶段";
+  if (p <= 20) return "开始动工了";
+  if (p <= 30) return "渐入状态";
+  if (p <= 40) return "稳步推进";
+  if (p <= 50) return "即将过半";
+  if (p <= 60) return "行程过半";
+  if (p <= 70) return "势如破竹";
+  if (p <= 80) return "胜利在望";
+  if (p <= 90) return "快完成了";
+  if (p < 100) return "马上就要完成了";
+  return "完美收官";
+};
+
+const getDynamicProgressColor = (p) => {
+  if (p <= 20) return "#10b981";
+  if (p <= 50) {
+    const ratio = (p - 20) / 30;
+    const r = Math.round(16 + (234 - 16) * ratio);
+    const g = Math.round(185 + (179 - 185) * ratio);
+    const b = Math.round(129 + (8 - 129) * ratio);
+    return `rgb(${r}, ${g}, ${b})`;
+  }
+  if (p <= 90) {
+    const ratio = (p - 50) / 40;
+    const r = Math.round(234 + (239 - 234) * ratio);
+    const g = Math.round(179 + (68 - 179) * ratio);
+    const b = Math.round(8 + (68 - 8) * ratio);
+    return `rgb(${r}, ${g}, ${b})`;
+  }
+  if (p < 100) {
+    const ratio = (p - 90) / 10;
+    const r = Math.round(239 + (255 - 239) * ratio);
+    const g = Math.round(68 + (0 - 68) * ratio);
+    const b = Math.round(8 + (0 - 8) * ratio);
+    return `rgb(${r}, ${g}, ${b})`;
+  }
+  return "#ff0000";
+};
+
+const globalStyles = `
+@keyframes nintendo-burst-right {
+  0% { transform: translate(0, 0) scale(0) rotate(0deg); opacity: 1; filter: brightness(1.5); }
+  20% { transform: translate(calc(var(--tx) * 0.4), calc(var(--ty) * 0.4)) scale(var(--s)) rotate(calc(var(--r) * 0.4)); opacity: 1; filter: brightness(1.2); }
+  80% { opacity: 1; }
+  100% { transform: translate(var(--tx), var(--ty)) scale(calc(var(--s) * 0.3)) rotate(var(--r)); opacity: 0; }
+}
+`;
+
+const playSuccessSound = () => {
+  try {
+    const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    const oscillator = audioCtx.createOscillator();
+    const gainNode = audioCtx.createGain();
+    
+    oscillator.type = 'sine';
+    // Frequency for a nice pleasant "ding" sound
+    oscillator.frequency.setValueAtTime(880, audioCtx.currentTime); // A5
+    oscillator.frequency.exponentialRampToValueAtTime(1760, audioCtx.currentTime + 0.1); // A6
+    
+    gainNode.gain.setValueAtTime(0, audioCtx.currentTime);
+    gainNode.gain.linearRampToValueAtTime(0.3, audioCtx.currentTime + 0.05);
+    gainNode.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.3);
+    
+    oscillator.connect(gainNode);
+    gainNode.connect(audioCtx.destination);
+    
+    oscillator.start();
+    oscillator.stop(audioCtx.currentTime + 0.3);
+  } catch (e) {
+    console.error("Audio playback failed", e);
+  }
+};
+
+const NintendoStarBurst = ({ loop = false }) => {
+  const stars = useMemo(() => {
+    return Array.from({ length: 3 }).map(() => ({
+      tx: `${20 + Math.random() * 30}px`,
+      ty: `${-25 + Math.random() * 50}px`,
+      s: 0.4 + Math.random() * 0.5,
+      r: `${-90 + Math.random() * 180}deg`,
+      delay: `${Math.random() * 0.1}s`,
+    }));
+  }, []);
+
+  const animEnd = loop ? 'infinite' : 'forwards';
+
+  return (
+    <div className="absolute z-50 flex items-center justify-center pointer-events-none">
+      {stars.map((st, i) => (
+        <svg key={i} viewBox="0 0 24 24" className="absolute text-yellow-300" style={{
+          width: '24px', height: '24px', fill: 'currentColor',
+          '--tx': st.tx, '--ty': st.ty, '--s': st.s, '--r': st.r,
+          animation: `nintendo-burst-right 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275) ${st.delay} ${animEnd}`
+        }}>
+          <polygon points="12,2 15,9 22,9 17,14 18,21 12,17 6,21 7,14 2,9 9,9" />
+        </svg>
+      ))}
+      <div className="absolute w-4 h-4 bg-white rounded-full opacity-0 animate-[ping_0.2s_ease-out_forwards]" />
+    </div>
+  );
+};
+
+const CustomPinIcon = ({ className }) => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className={className}>
+    <path d="M12 2C10.5 2 9 3 9 4.5v2C9 8 10 9 12 9s3-1 3-2.5v-2C15 3 13.5 2 12 2z" />
+    <path d="M12 9v13" />
+    <path d="M8 9h8" />
+  </svg>
+);
+
+const CustomSortIcon = ({ className }) => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className={className}>
+    <path d="M4 6h16" />
+    <path d="M5 12h10" />
+    <path d="M6 18h4" />
+    <path d="M16 10v10" />
+    <path d="M19 17l-3 3-3-3" />
+  </svg>
+);
+
+const App = () => {
+  const [rows, setRows] = useState(initialRows);
+  const [activeTool, setActiveTool] = useState("pointer");
+  const [paintColor, setPaintColor] = useState("#3b82f6");
+  const [timelineOffset, setTimelineOffset] = useState(0);
+  const [showHelp, setShowHelp] = useState(false);
+  const [showPalette, setShowPalette] = useState(false);
+  const [isWideMode, setIsWideMode] = useState(false);
+  const [isPinned, setIsPinned] = useState(false);
+  const [globalOpacity, setGlobalOpacity] = useState(60);
+  const [showOpacity, setShowOpacity] = useState(false);
+  const [showTheme, setShowTheme] = useState(false);
+  const [showMonthlyView, setShowMonthlyView] = useState(false);
+  const [showTodoList, setShowTodoList] = useState(true);
+  const [monthlyData, setMonthlyData] = useState({});
+  const [monthlyOffset, setMonthlyOffset] = useState(0);
+  const [monthlyDayOffset, setMonthlyDayOffset] = useState(0);
+  const [todoData, setTodoData] = useState({});
+  const [sortMode, setSortMode] = useState('creation');
+  const [globalThemeId, setGlobalThemeId] = useState('amber');
+  const hoveredMonthlyTaskRef = useRef(null);
+  const [creationOrderIds, setCreationOrderIds] = useState(() => initialRows.map(r => r.id));
+  const hoveredSegRef = useRef(null);
+  const [now, setNow] = useState(new Date());
+  const dataLoaded = useRef(false);
+  const ganttWindowRef = useRef(null);
+  const resizeStateRef = useRef(null);
+  const handleWindowEdgePointerDown = useCallback((e, edge) => {
+    if (!window.electronAPI?.getWindowBounds || !window.electronAPI?.setWindowBounds || isPinned) return;
+    e.preventDefault();
+    e.stopPropagation();
+    window.electronAPI.getWindowBounds().then((bounds) => {
+      if (!bounds) return;
+      resizeStateRef.current = {
+        edge,
+        startX: e.clientX,
+        startY: e.clientY,
+        startBounds: bounds,
+      };
+      const onMove = (moveE) => {
+        if (!resizeStateRef.current) return;
+        const { edge: ed, startX, startY, startBounds } = resizeStateRef.current;
+        const dx = moveE.clientX - startX;
+        const dy = moveE.clientY - startY;
+        let { x, y, width, height } = { ...startBounds };
+        if (ed === 'e' || ed === 'se' || ed === 'ne') width = Math.max(800, startBounds.width + dx);
+        if (ed === 'w' || ed === 'sw' || ed === 'nw') {
+          const newW = Math.max(800, startBounds.width - dx);
+          x = startBounds.x + startBounds.width - newW;
+          width = newW;
+        }
+        if (ed === 's' || ed === 'se' || ed === 'sw') height = Math.max(200, startBounds.height + dy);
+        if (ed === 'n' || ed === 'ne' || ed === 'nw') {
+          const newH = Math.max(200, startBounds.height - dy);
+          y = startBounds.y + startBounds.height - newH;
+          height = newH;
+        }
+        window.electronAPI?.setWindowBounds?.({ x, y, width, height });
+      };
+      const onUp = () => {
+        resizeStateRef.current = null;
+        window.removeEventListener('pointermove', onMove);
+        window.removeEventListener('pointerup', onUp);
+      };
+      window.addEventListener('pointermove', onMove);
+      window.addEventListener('pointerup', onUp);
+    });
+  }, [isPinned]);
+
+  useEffect(() => {
+    if (!window.electronAPI?.loadPlanData) { dataLoaded.current = true; return; }
+    window.electronAPI.loadPlanData().then((d) => {
+      if (d) {
+        if (d.rows) setRows(d.rows);
+        if (d.timelineOffset != null) setTimelineOffset(d.timelineOffset);
+        if (d.isWideMode != null) setIsWideMode(d.isWideMode);
+        if (d.globalOpacity != null) setGlobalOpacity(d.globalOpacity);
+        if (d.paintColor) setPaintColor(d.paintColor);
+        if (d.monthlyData) setMonthlyData(d.monthlyData);
+        if (d.todoData) setTodoData(d.todoData);
+        if (d.sortMode) setSortMode(d.sortMode);
+        if (d.rows?.length) {
+          const loadedIds = d.rows.map(r => r.id);
+          if (d.creationOrderIds?.length) {
+            const known = new Set(d.creationOrderIds);
+            const extra = loadedIds.filter(id => !known.has(id));
+            setCreationOrderIds([...d.creationOrderIds.filter(id => loadedIds.includes(id)), ...extra]);
+          } else {
+            setCreationOrderIds(loadedIds);
+          }
+        }
+      }
+      dataLoaded.current = true;
+    });
+  }, []);
+
+  const pastRef = useRef([]);
+  const todoPastRef = useRef([]);
+  const rowsRef = useRef(rows);
+  const todoDataRef = useRef(todoData);
+  useEffect(() => { rowsRef.current = rows; }, [rows]);
+  useEffect(() => { todoDataRef.current = todoData; }, [todoData]);
+
+  useEffect(() => {
+    if (window.electronAPI?.onForceUnpin) {
+      window.electronAPI.onForceUnpin(() => setIsPinned(false));
+    }
+    if (window.electronAPI?.onForcePin) {
+      window.electronAPI.onForcePin(() => setIsPinned(true));
+    }
+  }, []);
+
+  useEffect(() => {
+    if (window.electronAPI?.setWindowPinned) {
+      window.electronAPI.setWindowPinned(isPinned);
+    }
+  }, [isPinned]);
+
+  useEffect(() => {
+    if (window.electronAPI?.setWindowOpacity) {
+      window.electronAPI.setWindowOpacity(globalOpacity / 100);
+    }
+  }, [globalOpacity]);
+
+  useEffect(() => {
+    if (!dataLoaded.current || !window.electronAPI?.savePlanData) return;
+    const timer = setTimeout(() => {
+      window.electronAPI.savePlanData({ rows, timelineOffset, isWideMode, globalOpacity, paintColor, monthlyData, todoData, sortMode, creationOrderIds });
+    }, 500);
+    return () => clearTimeout(timer);
+  }, [rows, timelineOffset, isWideMode, globalOpacity, paintColor, monthlyData, todoData, sortMode, creationOrderIds]);
+
+  const ROW_HEIGHT_MONTHLY = 32;
+  const TODO_ITEM_HEIGHT = 28;
+  const rowHeight = isWideMode ? ROW_HEIGHT_WIDE : ROW_HEIGHT_NARROW;
+  const ganttContentHeight = HEADER_HEIGHT + rows.length * rowHeight + ADD_ROW_HEIGHT + GANTT_PADDING;
+
+  const { monthlyHeight, todoHeight } = useMemo(() => {
+    let mh = 0;
+    if (showMonthlyView) {
+      const year = now.getFullYear();
+      const month = now.getMonth() + 1;
+      const totalMonths = (year - baseYear) * 12 + (month - 1) + monthlyOffset;
+      const displayYear = baseYear + Math.floor(totalMonths / 12);
+      const displayMonth = ((totalMonths % 12) + 12) % 12 + 1;
+      const monthKey = `${displayYear}-${String(displayMonth).padStart(2, '0')}`;
+      const monthStart = (displayYear - baseYear) * 12 + (displayMonth - 1);
+      const monthEnd = monthStart + 1;
+      const spanRows = rows.filter(r => r.segments.some(s => s.start < monthEnd && s.end > monthStart));
+      const dataForMonth = monthlyData[monthKey] || { groups: {}, ungroupedTasks: [] };
+      let taskRows = 0;
+      spanRows.forEach(r => {
+        const g = dataForMonth.groups?.[r.id] || { tasks: [] };
+        taskRows += Math.max(1, g.tasks?.length || 0);
+      });
+      taskRows += Math.max(1, (dataForMonth.ungroupedTasks || []).length);
+      mh = 60 + 40 + (spanRows.length + 1) * ROW_HEIGHT_MONTHLY + taskRows * ROW_HEIGHT_MONTHLY;
+    }
+    let th = 0;
+    if (showTodoList) {
+      const yesterday = new Date(now); yesterday.setDate(yesterday.getDate() - 1);
+      const today = new Date(now);
+      const tomorrow = new Date(now); tomorrow.setDate(tomorrow.getDate() + 1);
+      const fmt = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+      const n1 = (todoData[fmt(yesterday)] || []).length;
+      const n2 = (todoData[fmt(today)] || []).length;
+      const n3 = (todoData[fmt(tomorrow)] || []).length;
+      const maxItems = Math.max(n1, n2, n3, 1);
+      th = 40 + maxItems * TODO_ITEM_HEIGHT + 32;
+    }
+    return { monthlyHeight: mh, todoHeight: th };
+  }, [showMonthlyView, showTodoList, rows, monthlyData, todoData, now, monthlyOffset]);
+
+  const contentHeight = ganttContentHeight + (showMonthlyView ? 24 + monthlyHeight : 0) + (showTodoList ? 24 + todoHeight : 0);
+  const rawWindowHeight = CONTAINER_TOP + 12 + contentHeight + HUD_HEIGHT + 20;
+  const maxWindowHeight = typeof window !== 'undefined' && window.screen?.availHeight ? Math.max(400, window.screen.availHeight - 80) : 900;
+  const totalWindowHeight = Math.min(Math.max(300, rawWindowHeight), maxWindowHeight);
+  const WINDOW_WIDTH = 960;
+
+  useEffect(() => {
+    if (window.electronAPI?.resizeWindow) {
+      window.electronAPI.resizeWindow(WINDOW_WIDTH, totalWindowHeight);
+    }
+  }, [totalWindowHeight]);
+
+  const commitHistory = useCallback(() => {
+    if (pastRef.current.length > 0 && pastRef.current[pastRef.current.length - 1] === rowsRef.current) return;
+    pastRef.current.push(rowsRef.current);
+  }, []);
+
+  const commitTodoHistory = useCallback(() => {
+    const curr = todoDataRef.current;
+    if (todoPastRef.current.length > 0 && todoPastRef.current[todoPastRef.current.length - 1] === curr) return;
+    todoPastRef.current.push(structuredClone(curr));
+  }, []);
+
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') {
+        const inTodo = document.activeElement?.closest?.('[data-todo-area]');
+        if (inTodo && todoPastRef.current.length > 0) {
+          e.preventDefault();
+          const previousState = todoPastRef.current.pop();
+          setTodoData(previousState);
+          return;
+        }
+        const tag = document.activeElement?.tagName.toLowerCase();
+        if (tag === 'input' || tag === 'textarea') return;
+        e.preventDefault();
+        if (pastRef.current.length > 0) {
+          const previousState = pastRef.current.pop();
+          setRows(previousState);
+        }
+        return;
+      }
+      if (e.key === 'Delete' || e.key === 'Backspace') {
+        const tag = document.activeElement?.tagName.toLowerCase();
+        if (tag === 'input' || tag === 'textarea') return;
+        if (hoveredMonthlyTaskRef.current) {
+          const { groupId, taskId, monthKey } = hoveredMonthlyTaskRef.current;
+          hoveredMonthlyTaskRef.current = null;
+          if (monthKey) {
+            setMonthlyData(prev => {
+              const d = prev[monthKey] || { groups: {}, ungroupedTasks: [] };
+              if (groupId) {
+                const g = d.groups?.[groupId];
+                if (!g) return prev;
+                const tasks = g.tasks.filter(t => t.id !== taskId);
+                return { ...prev, [monthKey]: { ...d, groups: { ...d.groups, [groupId]: { ...g, tasks } } } };
+              }
+              return { ...prev, [monthKey]: { ...d, ungroupedTasks: (d.ungroupedTasks || []).filter(t => t.id !== taskId) } };
+            });
+          }
+        } else if (hoveredSegRef.current) {
+          commitHistory();
+          const { rowId, segId } = hoveredSegRef.current;
+          setRows(prev => {
+            const rowIndex = prev.findIndex(r => r.id === rowId);
+            if (rowIndex === -1) return prev;
+            const row = prev[rowIndex];
+            if (row.segments.length <= 1) return prev.filter(r => r.id !== rowId);
+            const sortedSegs = [...row.segments].sort((a, b) => a.start - b.start);
+            const segIdx = sortedSegs.findIndex(s => s.id === segId);
+            if (segIdx === -1) return prev;
+            const deletedSeg = sortedSegs[segIdx];
+            if (segIdx > 0) {
+              sortedSegs[segIdx - 1] = { ...sortedSegs[segIdx - 1], end: deletedSeg.end };
+            } else if (sortedSegs.length > 1) {
+              sortedSegs[1] = { ...sortedSegs[1], start: deletedSeg.start };
+            }
+            sortedSegs.splice(segIdx, 1);
+            const newRows = [...prev];
+            newRows[rowIndex] = { ...row, segments: sortedSegs };
+            return newRows;
+          });
+          hoveredSegRef.current = null;
+        }
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [commitHistory, commitTodoHistory, setMonthlyData, setTodoData]);
+
+  useEffect(() => {
+    const timer = setInterval(() => setNow(new Date()), 1000);
+    return () => clearInterval(timer);
+  }, []);
+
+  const dateString = `${now.getFullYear()}年${now.getMonth() + 1}月${now.getDate()}日 ${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`;
+
+  const currentTimelinePos = useMemo(() => {
+    const year = now.getFullYear();
+    const month = now.getMonth();
+    const date = now.getDate();
+    const daysInMonth = new Date(year, month + 1, 0).getDate();
+    return (year - baseYear) * 12 + month + ((date - 1) / daysInMonth);
+  }, [now]);
+
+  const rowsWithProgress = useMemo(() => {
+    return rows.map(row => ({
+      ...row,
+      segments: row.segments.map(seg => {
+        let p = 0;
+        if (currentTimelinePos >= seg.end) p = 100;
+        else if (currentTimelinePos <= seg.start) p = 0;
+        else p = ((currentTimelinePos - seg.start) / (seg.end - seg.start)) * 100;
+        let isAck = seg.isAcknowledged;
+        if (p < 100) isAck = false;
+        return { ...seg, progress: p, isAcknowledged: isAck };
+      })
+    }));
+  }, [rows, currentTimelinePos]);
+
+  const updateSegment = (rowId, segmentId, updates) => {
+    setRows(prev => prev.map(row => {
+      if (row.id !== rowId) return row;
+      return { ...row, segments: row.segments.map(seg => seg.id !== segmentId ? seg : { ...seg, ...updates }) };
+    }));
+  };
+
+  const handleCutSegment = (rowId, segmentId, cutTime) => {
+    commitHistory();
+    setRows(prev => prev.map(row => {
+      if (row.id !== rowId) return row;
+      const segIdx = row.segments.findIndex(s => s.id === segmentId);
+      if (segIdx === -1) return row;
+      const seg = row.segments[segIdx];
+      if (cutTime <= seg.start + 0.2 || cutTime >= seg.end - 0.2) return row;
+      const newSeg = { ...seg, id: Date.now().toString(), name: "新段落", start: cutTime, isAcknowledged: false };
+      const updatedSeg = { ...seg, end: cutTime };
+      const newSegments = [...row.segments];
+      newSegments[segIdx] = updatedSeg;
+      newSegments.splice(segIdx + 1, 0, newSeg);
+      return { ...row, segments: newSegments };
+    }));
+    setActiveTool("pointer");
+  };
+
+  const addRow = () => {
+    commitHistory();
+    const newId = Date.now();
+    setRows(prev => [...prev, {
+      id: newId, title: "新任务项目",
+      segments: [{ id: `${newId}-1`, name: "起始", start: currentTimelinePos, end: currentTimelinePos + 4.0, color: DEFAULT_BAR_COLOR, isAcknowledged: false }]
+    }]);
+    setCreationOrderIds(prev => [...prev, newId]);
+  };
+
+  const deleteRow = (id) => { commitHistory(); setRows(prev => prev.filter(r => r.id !== id)); setCreationOrderIds(prev => prev.filter(rid => rid !== id)); };
+
+  const sortTasksByStartDate = () => {
+    if (sortMode === 'time') {
+      commitHistory();
+      setSortMode('creation');
+      setRows(prev => {
+        const byId = Object.fromEntries(prev.map(r => [r.id, r]));
+        const ordered = creationOrderIds.filter(id => byId[id]).map(id => byId[id]);
+        const remaining = prev.filter(r => !creationOrderIds.includes(r.id));
+        return [...ordered, ...remaining];
+      });
+    } else {
+      commitHistory();
+      setSortMode('time');
+      setRows(prev => {
+        const sorted = [...prev].sort((a, b) => {
+          const startA = Math.min(...a.segments.map(s => s.start));
+          const startB = Math.min(...b.segments.map(s => s.start));
+          return startA - startB;
+        });
+        return sorted;
+      });
+    }
+  };
+
+  const activeTheme = GLOBAL_THEMES.find(t => t.id === globalThemeId) || GLOBAL_THEMES[0];
+
+  const closeAllPanels = () => { setShowPalette(false); setShowHelp(false); setShowOpacity(false); setShowTheme(false); };
+
+  const panelDir = 'bottom-full mb-2 origin-bottom';
+
+  const hudContent = (
+    <div className="flex items-center gap-1 bg-neutral-900/60 backdrop-blur-xl p-1 rounded-xl border border-white/10 pointer-events-auto">
+        <button onClick={() => { setActiveTool("pointer"); closeAllPanels(); }} className={`p-1.5 rounded-lg transition-all ${activeTool === "pointer" ? activeTheme.highlight : 'text-white/40 hover:text-white/80'}`}>
+          <MousePointer2 className="w-4 h-4" />
+        </button>
+        <button onClick={() => { setActiveTool("cut"); closeAllPanels(); }} className={`p-1.5 rounded-lg transition-all ${activeTool === "cut" ? activeTheme.highlight : 'text-white/40 hover:text-white/80'}`}>
+          <Scissors className="w-4 h-4" />
+        </button>
+
+        <div className={`relative flex items-center ${showPalette ? 'z-50' : 'z-10'}`}>
+          <button onClick={() => { setShowPalette(!showPalette); setShowHelp(false); setShowOpacity(false); setShowTheme(false); }} className={`p-1.5 rounded-lg transition-all z-10 ${activeTool === "paint" || showPalette ? activeTheme.highlight : 'text-white/40 hover:text-white/80'}`}>
+            <PaintBucket className="w-4 h-4" color={activeTool === 'paint' ? paintColor : 'currentColor'} />
+          </button>
+          <div className={`absolute left-0 ${panelDir} transition-all duration-200 ${showPalette ? 'opacity-100 scale-100' : 'opacity-0 scale-95 pointer-events-none'}`}>
+            <div className="bg-neutral-800 border border-white/20 rounded-lg p-2 flex flex-wrap gap-1.5 w-[160px]">
+              {presetColors.map(c => (
+                <button key={c} onClick={() => { setPaintColor(c); setActiveTool("paint"); setShowPalette(false); }} className="w-5 h-5 rounded-full border border-white/10 hover:scale-110 transition-transform" style={{ backgroundColor: c }} />
+              ))}
+              <label className="w-5 h-5 rounded-full border border-white/30 hover:scale-110 transition-transform relative overflow-hidden cursor-pointer bg-gradient-to-br from-red-500 via-green-500 to-blue-500">
+                <input type="color" value={paintColor} onChange={(e) => { setPaintColor(e.target.value); setActiveTool("paint"); setShowPalette(false); }} className="absolute inset-0 opacity-0 cursor-pointer" />
+              </label>
+            </div>
+          </div>
+        </div>
+
+        <button onClick={() => { setIsWideMode(!isWideMode); closeAllPanels(); }} className={`p-1.5 rounded-lg transition-all z-10 ml-0.5 ${isWideMode ? activeTheme.highlight : 'text-white/40 hover:text-white/80'}`} title={isWideMode ? "关闭宽模式" : "开启宽模式"}>
+          <Maximize className="w-4 h-4" />
+        </button>
+
+        <div className={`relative flex items-center ml-1 ${showOpacity ? 'z-50' : 'z-10'}`}>
+          <button onClick={() => { setShowOpacity(!showOpacity); setShowPalette(false); setShowHelp(false); setShowTheme(false); }} className={`p-1.5 rounded-lg transition-all z-10 ${showOpacity ? activeTheme.highlight : 'text-white/40 hover:text-white/80'}`} title="透明度">
+            <SunDim className="w-4 h-4" />
+          </button>
+          <div className={`absolute left-0 ${panelDir} transition-all duration-200 ${showOpacity ? 'opacity-100 scale-100' : 'opacity-0 scale-95 pointer-events-none'}`}>
+            <div className="bg-neutral-800 border border-white/20 rounded-lg p-2 w-[120px]">
+              <div className="text-[10px] text-white/70 mb-1.5">透明度 {globalOpacity}%</div>
+              <input type="range" min="10" max="100" step="5" value={globalOpacity}
+                onChange={(e) => setGlobalOpacity(Number(e.target.value))}
+                className="w-full h-1.5 accent-sky-500 cursor-pointer" />
+            </div>
+          </div>
+        </div>
+
+        <button onClick={() => { setIsPinned(true); closeAllPanels(); }}
+          className="p-1.5 rounded-lg transition-all text-white/40 hover:text-white/80 ml-1" title="定住窗口">
+          <CustomPinIcon className="w-4 h-4" />
+        </button>
+
+        <button onClick={() => { sortTasksByStartDate(); closeAllPanels(); }}
+          className={`p-1.5 rounded-lg transition-all ml-1 ${sortMode === 'time' ? activeTheme.highlight : 'text-white/40 hover:text-white/80'}`} title={sortMode === 'time' ? '切回创建顺序' : '按起始日期排序'}>
+          <CustomSortIcon className="w-4 h-4" />
+        </button>
+
+        <div className={`relative flex items-center ml-1 ${showTheme ? 'z-50' : 'z-10'}`}>
+          <button onClick={() => { setShowTheme(!showTheme); setShowPalette(false); setShowHelp(false); setShowOpacity(false); }} className={`p-1.5 rounded-lg transition-all z-10 ${showTheme ? activeTheme.highlight : 'text-white/40 hover:text-white/80'}`} title="全局主题色">
+            <Palette className="w-4 h-4" />
+          </button>
+          <div className={`absolute left-1/2 -translate-x-1/2 ${panelDir} transition-all duration-200 ${showTheme ? 'opacity-100 scale-100' : 'opacity-0 scale-95 pointer-events-none'}`}>
+            <div className="bg-neutral-800 border border-white/20 rounded-lg p-2 flex flex-wrap gap-1.5 w-[140px]">
+              {GLOBAL_THEMES.map(t => (
+                <button key={t.id} onClick={() => { setGlobalThemeId(t.id); setShowTheme(false); }} title={t.name} className={`w-5 h-5 rounded-full border transition-transform ${globalThemeId === t.id ? 'scale-110 border-white' : 'border-white/10 hover:scale-110'}`} style={{ backgroundColor: t.color }} />
+              ))}
+            </div>
+          </div>
+        </div>
+
+        <div className={`relative flex items-center ml-1 ${showHelp ? 'z-50' : 'z-10'}`}>
+          <button onClick={() => { setShowHelp(!showHelp); setShowPalette(false); setShowOpacity(false); setShowTheme(false); }} className={`p-1.5 rounded-lg transition-all z-10 ${showHelp ? activeTheme.highlight : 'text-white/40 hover:text-white/80'}`}>
+            <HelpCircle className="w-4 h-4" />
+          </button>
+          <div className={`absolute right-0 ${panelDir} transition-all duration-200 ${showHelp ? 'opacity-100 scale-100' : 'opacity-0 scale-95 pointer-events-none'}`}>
+            <div className="bg-neutral-800 border border-white/20 rounded-lg p-3 text-[10px] text-white/80 w-[200px]">
+              <div className="font-bold text-white mb-2 flex items-center justify-between">
+                <span>快捷操作指南</span>
+                <button onClick={() => setShowHelp(false)} className="hover:text-white transition-colors"><X className="w-3 h-3" /></button>
+              </div>
+              <div className="space-y-1.5">
+                <p>• <span className="text-amber-300">平移时间:</span> 左右拖拽上方月份和年份</p>
+                <p>• <span className="text-amber-300">调整任务:</span> 拖拽条的中间或首尾</p>
+                <p>• <span className="text-amber-300">撤销操作:</span> Ctrl+Z / Cmd+Z</p>
+                <p>• <span className="text-amber-300">删除任务:</span> 悬浮条按 Delete</p>
+                <p>• <span className="text-amber-300">今日时间:</span> 贯穿全局的黄线</p>
+                <p>• <span className="text-amber-300">填充颜色:</span> 选色后点击任务条</p>
+              </div>
+            </div>
+          </div>
+        </div>
+    </div>
+  );
+
+  return (
+    <div className="w-screen h-screen text-slate-100 font-sans select-none overflow-visible relative" onContextMenu={(e) => e.preventDefault()}>
+      <style>{globalStyles}</style>
+      <div className="pointer-events-none fixed inset-0 z-[9999] mix-blend-color" style={{ backgroundColor: activeTheme.tint }} />
+
+      <div className="absolute left-0 right-0 flex flex-col" style={{ width: '100%', top: `${CONTAINER_TOP}px` }}>
+        <div
+          ref={ganttWindowRef}
+          className="bg-neutral-900/60 backdrop-blur-2xl border border-white/10 rounded-xl overflow-visible transition-all duration-500 relative"
+        >
+          {!isPinned && typeof window !== 'undefined' && window.electronAPI && (
+            <>
+              <div className="absolute left-0 top-0 bottom-0 w-[8px] cursor-ew-resize z-[200] hover:bg-white/5 rounded-l-xl" onPointerDown={(e) => handleWindowEdgePointerDown(e, 'w')} style={{ WebkitAppRegion: 'no-drag' }} />
+              <div className="absolute right-0 top-0 bottom-0 w-[8px] cursor-ew-resize z-[200] hover:bg-white/5 rounded-r-xl" onPointerDown={(e) => handleWindowEdgePointerDown(e, 'e')} style={{ WebkitAppRegion: 'no-drag' }} />
+              <div className="absolute left-0 right-0 top-0 h-[8px] cursor-ns-resize z-[200] hover:bg-white/5 rounded-t-xl" onPointerDown={(e) => handleWindowEdgePointerDown(e, 'n')} style={{ WebkitAppRegion: 'no-drag' }} />
+              <div className="absolute left-0 right-0 bottom-0 h-[8px] cursor-ns-resize z-[200] hover:bg-white/5 rounded-b-xl" onPointerDown={(e) => handleWindowEdgePointerDown(e, 's')} style={{ WebkitAppRegion: 'no-drag' }} />
+              <div className="absolute bottom-0 right-0 w-[8px] h-[8px] cursor-se-resize z-[200] hover:bg-white/5 rounded-br-xl" onPointerDown={(e) => handleWindowEdgePointerDown(e, 'se')} style={{ WebkitAppRegion: 'no-drag' }} />
+              <div className="absolute bottom-0 left-0 w-[8px] h-[8px] cursor-sw-resize z-[200] hover:bg-white/5 rounded-bl-xl" onPointerDown={(e) => handleWindowEdgePointerDown(e, 'sw')} style={{ WebkitAppRegion: 'no-drag' }} />
+              <div className="absolute top-0 right-0 w-[8px] h-[8px] cursor-ne-resize z-[200] hover:bg-white/5 rounded-tr-xl" onPointerDown={(e) => handleWindowEdgePointerDown(e, 'ne')} style={{ WebkitAppRegion: 'no-drag' }} />
+              <div className="absolute top-0 left-0 w-[8px] h-[8px] cursor-nw-resize z-[200] hover:bg-white/5 rounded-tl-xl" onPointerDown={(e) => handleWindowEdgePointerDown(e, 'nw')} style={{ WebkitAppRegion: 'no-drag' }} />
+            </>
+          )}
+          <div className="rounded-xl overflow-hidden">
+            <div className="h-3 cursor-default rounded-t-xl" style={{ WebkitAppRegion: 'drag' }} />
+            {isPinned && (
+              <div className="absolute bottom-3 right-3 z-50 p-1.5 pointer-events-none opacity-20">
+                <CustomPinIcon className="w-3 h-3 text-white" />
+              </div>
+            )}
+            <div
+              className={`gantt-scroll-area px-6 pb-6 relative flex flex-col gap-0 overflow-y-auto overflow-x-hidden overscroll-contain ${isPinned ? 'pointer-events-none' : ''}`}
+              style={{ maxHeight: totalWindowHeight - CONTAINER_TOP - HUD_HEIGHT - 44 }}
+            >
+              <GanttView
+                rows={rowsWithProgress}
+                setRows={setRows}
+                updateSegment={updateSegment}
+                activeTool={activeTool}
+                setActiveTool={setActiveTool}
+                paintColor={paintColor}
+                onCut={handleCutSegment}
+                onAdd={addRow}
+                onDelete={deleteRow}
+                timelineOffset={timelineOffset}
+                setTimelineOffset={setTimelineOffset}
+                currentTimelinePos={currentTimelinePos}
+                hoveredSegRef={hoveredSegRef}
+                commitHistory={commitHistory}
+                isWideMode={isWideMode}
+                activeTheme={activeTheme}
+              />
+              {showMonthlyView && (
+                <motion.div initial={{ height: 0, opacity: 0, overflow: 'hidden' }} animate={{ height: 'auto', opacity: 1, transitionEnd: { overflow: 'visible' } }} exit={{ height: 0, opacity: 0, overflow: 'hidden' }} className="border-t border-white/10 pt-1 mt-1">
+                  <MonthlyGanttView
+                    rows={rows}
+                    setRows={setRows}
+                    monthlyData={monthlyData}
+                    setMonthlyData={setMonthlyData}
+                    monthlyOffset={monthlyOffset}
+                    setMonthlyOffset={setMonthlyOffset}
+                    monthlyDayOffset={monthlyDayOffset}
+                    setMonthlyDayOffset={setMonthlyDayOffset}
+                    now={now}
+                    baseYear={baseYear}
+                    sortMode={sortMode}
+                    activeTool={activeTool}
+                    setActiveTool={setActiveTool}
+                    paintColor={paintColor}
+                    hoveredMonthlyTaskRef={hoveredMonthlyTaskRef}
+                    commitHistory={commitHistory}
+                    isWideMode={isWideMode}
+                    activeTheme={activeTheme}
+                  />
+                </motion.div>
+              )}
+              {showTodoList && (
+                <motion.div data-todo-area initial={{ height: 0, opacity: 0, overflow: 'hidden' }} animate={{ height: 'auto', opacity: 1, transitionEnd: { overflow: 'visible' } }} exit={{ height: 0, opacity: 0, overflow: 'hidden' }} className="border-t border-white/10 pt-4 mt-2">
+                  <TodoListView now={now} todoData={todoData} setTodoData={setTodoData} activeTheme={activeTheme} commitTodoHistory={commitTodoHistory} />
+                </motion.div>
+              )}
+            </div>
+            {!isPinned && (
+              <div className="flex items-center justify-between px-3 py-2 border-t border-white/10">
+                {hudContent}
+                <div className="flex items-center gap-1">
+                  <button onClick={() => setShowMonthlyView(!showMonthlyView)} className={`p-1.5 rounded-lg transition-all ${showMonthlyView ? activeTheme.highlight : 'text-white/40 hover:text-white/80'}`} title="月度视图">
+                    <Calendar className="w-4 h-4" />
+                  </button>
+                  <button onClick={() => setShowTodoList(!showTodoList)} className={`p-1.5 rounded-lg transition-all ${showTodoList ? activeTheme.highlight : 'text-white/40 hover:text-white/80'}`} title="待办列表">
+                    <ListTodo className="w-4 h-4" />
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// ==========================================
+// 甘特图引擎
+// ==========================================
+const GanttView = ({ rows, setRows, updateSegment, activeTool, setActiveTool, paintColor, onCut, onAdd, onDelete, timelineOffset, setTimelineOffset, currentTimelinePos, hoveredSegRef, commitHistory, isWideMode, activeTheme }) => {
+  const trackRef = useRef(null);
+
+  const visibleMonths = useMemo(() => {
+    const startMonthInt = Math.floor(timelineOffset);
+    return Array.from({ length: 14 }).map((_, i) => {
+      const totalMonths = startMonthInt + i - 1;
+      const y = baseYear + Math.floor(totalMonths / 12);
+      const m = (totalMonths % 12 + 12) % 12;
+      const leftPct = ((totalMonths - timelineOffset) / 12) * 100;
+      return { year: y, month: m + 1, label: `${m + 1}月`, index: totalMonths, leftPct };
+    });
+  }, [timelineOffset]);
+
+  const yearSpans = useMemo(() => {
+    const blocks = [];
+    let currentYear = null;
+    let startPct = 0;
+    visibleMonths.forEach((m, i) => {
+      if (m.year !== currentYear) {
+        if (currentYear !== null) blocks.push({ year: currentYear, startPct, endPct: m.leftPct });
+        currentYear = m.year;
+        startPct = m.leftPct;
+      }
+      if (i === visibleMonths.length - 1) {
+        blocks.push({ year: currentYear, startPct, endPct: m.leftPct + (1 / 12) * 100 });
+      }
+    });
+    return blocks;
+  }, [visibleMonths]);
+
+  const todayLeftPercent = ((currentTimelinePos - timelineOffset) / 12) * 100;
+  const rowHeight = isWideMode ? ROW_HEIGHT_WIDE : ROW_HEIGHT_NARROW;
+
+  const handleHeaderPointerDown = (e) => {
+    e.preventDefault();
+    const startX = e.clientX;
+    const initialOffset = timelineOffset;
+    const trackWidth = trackRef.current.getBoundingClientRect().width;
+    const onMove = (moveEvent) => {
+      const dx = moveEvent.clientX - startX;
+      const deltaMonths = -(dx / trackWidth) * 12;
+      let targetOffset = initialOffset + deltaMonths;
+      const snappedOffset = Math.round(targetOffset);
+      if (Math.abs(targetOffset - snappedOffset) < 0.2) targetOffset = snappedOffset;
+      setTimelineOffset(targetOffset);
+    };
+    const onUp = () => { window.removeEventListener('pointermove', onMove); window.removeEventListener('pointerup', onUp); };
+    window.addEventListener('pointermove', onMove);
+    window.addEventListener('pointerup', onUp);
+  };
+
+  const handleBarPointerDown = (e, row, seg) => {
+    e.stopPropagation();
+    if (e.target.tagName.toLowerCase() === 'input') return;
+
+    if (activeTool === 'cut') {
+      if (e.button === 0 && trackRef.current) {
+        const rect = trackRef.current.getBoundingClientRect();
+        const x = Math.max(0, Math.min(e.clientX - rect.left, rect.width));
+        onCut(row.id, seg.id, timelineOffset + (x / rect.width) * 12);
+      }
+      return;
+    }
+    if (activeTool === 'paint') {
+      if (e.button === 0) { commitHistory(); updateSegment(row.id, seg.id, { color: hexToRgba(paintColor, 0.4) }); setActiveTool("pointer"); }
+      return;
+    }
+    if (e.button !== 0) return;
+
+    const rect = e.currentTarget.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const isLeftEdge = x < 12;
+    const isRightEdge = x > rect.width - 12;
+    let action = 'move';
+    if (isLeftEdge) action = 'start';
+    if (isRightEdge) action = 'end';
+    commitHistory();
+
+    const startX = e.clientX;
+    const initialStart = seg.start;
+    const initialEnd = seg.end;
+    const sortedSegs = [...row.segments].sort((a, b) => a.start - b.start);
+    const segIdx = sortedSegs.findIndex(s => s.id === seg.id);
+    const prevSeg = segIdx > 0 ? sortedSegs[segIdx - 1] : null;
+    const nextSeg = segIdx < sortedSegs.length - 1 ? sortedSegs[segIdx + 1] : null;
+    const minBound = prevSeg ? prevSeg.end : -100;
+    const maxBound = nextSeg ? nextSeg.start : 100;
+    const SNAP = 0.15;
+
+    const onMove = (moveEvent) => {
+      const dx = moveEvent.clientX - startX;
+      const monthWidth = trackRef.current.getBoundingClientRect().width / 12;
+      const timeDelta = dx / monthWidth;
+      let tS = initialStart, tE = initialEnd;
+      const dur = initialEnd - initialStart;
+      if (action === 'move') {
+        tS += timeDelta; tE += timeDelta;
+        const sS = Math.round(tS), sE = Math.round(tE);
+        if (Math.abs(tS - sS) < SNAP) { tS = sS; tE = tS + dur; }
+        else if (Math.abs(tE - sE) < SNAP) { tE = sE; tS = tE - dur; }
+        if (tS < minBound) { tS = minBound; tE = tS + dur; }
+        if (tE > maxBound) { tE = maxBound; tS = tE - dur; }
+      } else if (action === 'start') {
+        tS += timeDelta;
+        const sS = Math.round(tS);
+        if (Math.abs(tS - sS) < SNAP) tS = sS;
+        if (tS < minBound) tS = minBound;
+        if (tS > tE - 0.2) tS = tE - 0.2;
+      } else if (action === 'end') {
+        tE += timeDelta;
+        const sE = Math.round(tE);
+        if (Math.abs(tE - sE) < SNAP) tE = sE;
+        if (tE > maxBound) tE = maxBound;
+        if (tE < tS + 0.2) tE = tS + 0.2;
+      }
+      updateSegment(row.id, seg.id, { start: tS, end: tE, isAcknowledged: false });
+    };
+    const onUp = () => { window.removeEventListener('pointermove', onMove); window.removeEventListener('pointerup', onUp); };
+    window.addEventListener('pointermove', onMove);
+    window.addEventListener('pointerup', onUp);
+  };
+
+  return (
+    <div className="w-full flex flex-col relative" style={{ cursor: activeTool === 'cut' || activeTool === 'paint' ? 'crosshair' : 'default' }}>
+      <div className="flex gap-4 mb-1 border-b border-white/20 pb-1 relative z-20 cursor-grab active:cursor-grabbing group/header" onPointerDown={handleHeaderPointerDown}>
+        <div className="w-[140px] shrink-0 flex items-end">
+          <span className="text-[10px] text-white/30 uppercase tracking-wider pointer-events-none">时间轴</span>
+        </div>
+        <div className="flex-1 flex flex-col relative" ref={trackRef}>
+          <div className="relative w-full overflow-hidden h-[18px]">
+            <div className="flex w-full overflow-hidden h-[18px]">
+              {yearSpans.map((span, i) => {
+                const left = Math.max(0, span.startPct);
+                const right = Math.min(100, span.endPct);
+                const width = right - left;
+                if (width <= 0) return null;
+                return (
+                  <div key={i} className="absolute top-0 bottom-0 p-[1px] border-l border-white/5" style={{ left: `${left}%`, width: `${width}%` }}>
+                    <div className="bg-neutral-800/80 w-full h-full rounded-[4px] flex items-center px-2 overflow-hidden">
+                      <span className="text-[10px] font-black text-white/70 whitespace-nowrap">{span.year}年</span>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+          <div className="relative w-full h-[20px] flex items-center overflow-hidden pointer-events-none">
+            {visibleMonths.map((m) => (
+              <div key={m.index} className="absolute text-[10px] font-bold text-white/50 pl-1" style={{ left: `${m.leftPct}%` }}>{m.label}</div>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      <div className="w-full relative flex flex-col">
+        <div className="absolute top-0 bottom-0 left-0 pointer-events-none z-10" style={{
+          right: '-24px',
+          maskImage: 'linear-gradient(to right, transparent 0px, transparent 140px, black 156px, black calc(100% - 24px), transparent 100%)',
+          WebkitMaskImage: 'linear-gradient(to right, transparent 0px, transparent 140px, black 156px, black calc(100% - 24px), transparent 100%)'
+        }}>
+          <div className="absolute -top-[30px] -bottom-[30px] left-[156px] pointer-events-none overflow-visible" style={{ right: '24px' }}>
+            {rows.map((row, rowIdx) => (
+              <motion.div
+                key={row.id}
+                layout
+                transition={{ type: 'tween', duration: 0.4, ease: [0.25, 0.46, 0.45, 0.94] }}
+                className="absolute left-0 right-0 pointer-events-none"
+                style={{ height: `${rowHeight}px`, top: `${30 + rowIdx * rowHeight}px` }}
+              >
+                {row.segments.map(seg => {
+                  const leftPercent = ((seg.start - timelineOffset) / 12) * 100;
+                  const widthPercent = ((seg.end - seg.start) / 12) * 100;
+                  if (leftPercent + widthPercent <= -100 || leftPercent >= 100) return null;
+                  return (
+                    <SegmentBar key={seg.id} row={row} seg={seg} leftPercent={leftPercent} widthPercent={widthPercent}
+                      activeTool={activeTool} hoveredSegRef={hoveredSegRef}
+                      onPointerDown={(e) => handleBarPointerDown(e, row, seg)}
+                      updateSegment={updateSegment} commitHistory={commitHistory} isWideMode={isWideMode} />
+                  );
+                })}
+              </motion.div>
+            ))}
+          </div>
+        </div>
+
+        {rows.map(row => (
+          <motion.div
+            key={row.id}
+            layout
+            transition={{ type: 'tween', duration: 0.4, ease: [0.25, 0.46, 0.45, 0.94] }}
+            className="flex gap-4 items-stretch group/row relative border-b border-white/5 hover:bg-white/[0.02] transition-colors duration-300 box-border"
+            style={{ height: `${rowHeight}px` }}
+          >
+            <div className="w-[140px] shrink-0 pl-1 pr-2 flex items-center justify-between group/rowtitle relative z-20">
+              <textarea value={row.title} onFocus={() => commitHistory()}
+                onChange={(e) => {
+                  const newVal = e.target.value.replace(/\n/g, '');
+                  const el = e.target;
+                  const saved = el.value;
+                  el.value = newVal;
+                  const overflows = el.scrollHeight > el.clientHeight + 2;
+                  el.value = saved;
+                  if (!overflows) {
+                    setRows(prev => prev.map(r => r.id === row.id ? { ...r, title: newVal } : r));
+                  }
+                }}
+                onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); e.target.blur(); } }}
+                className="flex-1 min-w-0 bg-transparent text-[11px] font-bold text-white/80 focus:text-white focus:outline-none transition-all m-0 pointer-events-auto"
+                style={{ resize: 'none', overflow: 'hidden', lineHeight: '14px', fieldSizing: 'content', maxHeight: '28px', wordBreak: 'break-all', padding: 0 }} />
+              <button onClick={() => onDelete(row.id)} className="opacity-0 group-hover/rowtitle:opacity-100 text-white/30 hover:text-rose-400 shrink-0 transition-opacity p-1 pointer-events-auto" title="删除任务">
+                <Trash2 className="w-3.5 h-3.5" />
+              </button>
+            </div>
+            <div className="flex-1 relative h-full pointer-events-none overflow-hidden">
+              {visibleMonths.map((m) => (
+                <div key={m.index} className="absolute top-0 bottom-0 border-l border-white/5" style={{ left: `${m.leftPct}%` }} />
+              ))}
+            </div>
+          </motion.div>
+        ))}
+
+        <div className="flex items-center h-8 relative z-10 opacity-30 hover:opacity-100 transition-opacity mt-1">
+          <div className="w-[140px] shrink-0 pl-1">
+            <button onClick={onAdd} className="flex items-center gap-1 text-[10px] font-bold text-white py-1">
+              <Plus className="w-3 h-3" /> 增加行
+            </button>
+          </div>
+        </div>
+
+        <div className="absolute top-0 bottom-0 left-[156px] right-0 pointer-events-none z-[100] overflow-visible">
+          {todayLeftPercent >= 0 && todayLeftPercent <= 100 && (
+            <div className={`absolute top-0 bottom-0 w-[1px] ${activeTheme.todayLine}`} style={{ left: `${todayLeftPercent}%` }}>
+              <div className={`absolute top-0 left-[0.5px] -translate-x-1/2 w-0 h-0 border-x-[3.5px] border-x-transparent border-t-[5px] ${activeTheme.todayArrow}`} />
+            </div>
+          )}
+          {todayLeftPercent < 0 && (
+            <div
+              className="absolute left-0 top-1/2 -translate-y-1/2 z-[101] cursor-pointer pointer-events-auto hover:opacity-100 animate-blink-soft"
+              onClick={() => setTimelineOffset(0)}
+              title="回到今天"
+            >
+              <div className="w-0 h-0 border-y-[8px] border-y-transparent border-r-[10px]" style={{ borderRightColor: activeTheme.todayColor }} />
+            </div>
+          )}
+          {todayLeftPercent > 100 && (
+            <div
+              className="absolute right-0 top-1/2 -translate-y-1/2 z-[101] cursor-pointer pointer-events-auto hover:opacity-100 animate-blink-soft"
+              onClick={() => setTimelineOffset(0)}
+              title="回到今天"
+            >
+              <div className="w-0 h-0 border-y-[8px] border-y-transparent border-l-[10px]" style={{ borderLeftColor: activeTheme.todayColor }} />
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// ==========================================
+// Segment Bar
+// ==========================================
+const SegmentBar = ({ row, seg, leftPercent, widthPercent, activeTool, hoveredSegRef, onPointerDown, updateSegment, commitHistory, isWideMode }) => {
+  const [localHoverX, setLocalHoverX] = useState(null);
+  const [isHoveringBar, setIsHoveringBar] = useState(false);
+  const [isHoveringName, setIsHoveringName] = useState(false);
+  const [isNameFocused, setIsNameFocused] = useState(false);
+  const showStatus = isHoveringBar && !isHoveringName && !isNameFocused;
+
+  const [burstKey, setBurstKey] = useState(0);
+  useEffect(() => {
+    if (seg.progress === 100 && !seg.isAcknowledged) {
+      setBurstKey(Date.now());
+      const timer = setInterval(() => setBurstKey(Date.now()), 1500);
+      return () => clearInterval(timer);
+    }
+  }, [seg.progress, seg.isAcknowledged]);
+
+  const handleClickToAcknowledge = (e) => {
+    if (seg.progress === 100 && !seg.isAcknowledged) {
+      e.stopPropagation();
+      commitHistory();
+      updateSegment(row.id, seg.id, { isAcknowledged: true });
+      playSuccessSound();
+    }
+  };
+
+  const barBgColor = seg.isAcknowledged ? 'rgba(16, 185, 129, 0.05)' : seg.color;
+  const progressFillColor = seg.isAcknowledged ? 'rgba(16, 185, 129, 0.2)' : getDynamicProgressColor(seg.progress);
+
+  return (
+    <div
+      data-row-id={row.id} data-seg-id={seg.id}
+      className="absolute top-0 bottom-0 pointer-events-auto flex group group/seg"
+      style={{ left: `${leftPercent}%`, width: `${widthPercent}%` }}
+      onPointerDown={onPointerDown}
+      onClick={handleClickToAcknowledge}
+      onMouseEnter={() => { hoveredSegRef.current = { rowId: row.id, segId: seg.id }; setIsHoveringBar(true); }}
+      onMouseLeave={() => { hoveredSegRef.current = null; setLocalHoverX(null); setIsHoveringBar(false); setIsHoveringName(false); }}
+      onPointerMove={(e) => { if (activeTool === 'cut') { const rect = e.currentTarget.getBoundingClientRect(); setLocalHoverX(e.clientX - rect.left); } }}
+    >
+      <div className={`absolute inset-0 transition-colors duration-300 rounded-[4px] overflow-hidden border border-white/5 ${activeTool === 'pointer' ? 'hover:outline hover:outline-1 hover:outline-white/30 z-20 hover:z-30' : ''}`} style={{ backgroundColor: barBgColor }}>
+        <div className="h-full relative transition-all flex items-center justify-center" style={{ width: `${seg.progress}%`, backgroundColor: progressFillColor, transitionDuration: '100ms' }} />
+      </div>
+
+      {seg.progress === 100 && !seg.isAcknowledged && (
+        <div className="absolute z-50 flex items-center justify-center pointer-events-none" style={{ left: `min(100%, max(0%, ${seg.progress}%))` }}>
+          <NintendoStarBurst key={burstKey} />
+        </div>
+      )}
+
+      {activeTool === 'cut' && localHoverX !== null && (
+        <div className="absolute top-0 bottom-0 w-[1px] bg-rose-500 z-50 pointer-events-none" style={{ left: localHoverX }}>
+          <Scissors className="w-3 h-3 text-rose-500 absolute -top-3 -translate-x-1/2 rotate-90" />
+        </div>
+      )}
+
+      {/* 标题 + 状态文字：左上角，hover 切换 */}
+      <div className={`absolute left-2 z-30 pointer-events-auto cursor-text ${isWideMode ? 'top-[4px]' : 'top-0 bottom-0 flex items-center'}`}>
+        <div
+          className={`transition-opacity ${showStatus ? 'opacity-0' : 'opacity-100'}`}
+          onMouseEnter={() => setIsHoveringName(true)}
+          onMouseLeave={() => setIsHoveringName(false)}
+        >
+          <input type="text" value={seg.name}
+            onFocus={() => { commitHistory(); setIsNameFocused(true); }}
+            onBlur={() => setIsNameFocused(false)}
+            onChange={(e) => updateSegment(row.id, seg.id, { name: e.target.value })}
+            onKeyDown={(e) => { if (e.key === 'Enter') e.target.blur(); }}
+            className="bg-transparent text-[10px] font-bold text-white focus:outline-none p-0 m-0 leading-none h-auto pointer-events-auto"
+            style={{ width: `${Math.max(2, getVisualLength(seg.name) + 0.5)}ch` }} />
+        </div>
+        <div className={`absolute left-0 top-0 transition-opacity whitespace-nowrap pointer-events-none ${showStatus ? 'opacity-100' : 'opacity-0'} ${!isWideMode ? 'bottom-0 flex items-center' : ''}`}>
+          <span className="text-[10px] font-black text-white leading-none">
+            {getProgressText(Math.round(seg.progress))}
+          </span>
+        </div>
+      </div>
+
+      {/* 宽模式备注：居中偏下 */}
+      {isWideMode && (
+        <div className="absolute left-1/2 -translate-x-1/2 bottom-[6px] z-30 pointer-events-auto cursor-text">
+          <input type="text" value={seg.remark || ''} onFocus={() => commitHistory()}
+            onChange={(e) => updateSegment(row.id, seg.id, { remark: e.target.value })}
+            onKeyDown={(e) => { if (e.key === 'Enter') e.target.blur(); }}
+            placeholder={isHoveringBar ? "点击添加备注..." : ""}
+            className={`bg-transparent text-[10px] text-white/70 font-normal text-center focus:outline-none p-0 m-0 leading-none h-auto pointer-events-auto transition-all ${!seg.remark && !isHoveringBar ? 'opacity-0' : 'opacity-100 placeholder:text-white/30'}`}
+            style={{ width: `${Math.max(12, getVisualLength(seg.remark || '') + 1)}ch` }} />
+        </div>
+      )}
+
+      {activeTool === 'pointer' && (
+        <>
+          <div className="absolute left-0 top-0 bottom-0 w-3 cursor-ew-resize hover:bg-white/30 z-30" />
+          <div className="absolute right-0 top-0 bottom-0 w-3 cursor-ew-resize hover:bg-white/30 z-30" />
+        </>
+      )}
+    </div>
+  );
+};
+
+// ==========================================
+// 月度甘特图
+// ==========================================
+const ROW_HEIGHT_MONTHLY = 32;
+const ROW_HEIGHT_MONTHLY_WIDE = 48;
+const getMonthKey = (year, month) => `${year}-${String(month).padStart(2, '0')}`;
+const monthSpansYear = (year, month, rows) => {
+  const monthStart = (year - baseYear) * 12 + (month - 1);
+  const monthEnd = monthStart + 1;
+  return rows.filter(row => row.segments.some(seg => seg.start < monthEnd && seg.end > monthStart));
+};
+
+const rowsForMonth = (year, month, rows) => {
+  return monthSpansYear(year, month, rows);
+};
+
+const getRowBackgroundDays = (row, year, month) => {
+  const monthStart = (year - baseYear) * 12 + (month - 1);
+  const daysInMonth = new Date(year, month, 0).getDate();
+  const minStart = Math.min(...row.segments.map(s => s.start));
+  const maxEnd = Math.max(...row.segments.map(s => s.end));
+  const startDay = 1 + (minStart - monthStart) * daysInMonth;
+  const endDay = (maxEnd - monthStart) * daysInMonth;
+  return { startDay, endDay };
+};
+
+const MonthlyBarInput = ({ task, rowId, isGrouped, updateTask, prog, isAck }) => {
+  const [editing, setEditing] = useState(false);
+  const inputRef = useRef(null);
+  useEffect(() => {
+    if (editing) inputRef.current?.focus();
+  }, [editing]);
+  const save = (value) => {
+    if (value !== task.name) updateTask(rowId, task.id, { name: value });
+    setEditing(false);
+  };
+  if (editing) {
+    return (
+      <div className="absolute left-0 top-0 bottom-0 pl-1 flex items-center pointer-events-auto z-30" style={{ minWidth: 60 }}>
+        <input ref={inputRef} type="text" defaultValue={task.name}
+          onBlur={e => save(e.target.value)}
+          onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); e.target.blur(); } }}
+          className="bg-transparent text-[10px] px-1 text-white focus:outline-none w-full"
+          onClick={e => e.stopPropagation()} />
+      </div>
+    );
+  }
+  return (
+    <div className="absolute left-0 top-0 bottom-0 pl-1 flex items-center pointer-events-auto cursor-text z-20" style={{ minWidth: 40 }}
+      onDoubleClick={e => { e.stopPropagation(); setEditing(true); }}
+      onClick={e => { if (!(prog === 100 && !isAck)) e.stopPropagation(); }}>
+      <span className="text-[10px] text-white truncate max-w-[120px]">{task.name || '新任务'}</span>
+    </div>
+  );
+};
+
+const MonthlyGanttView = ({ rows, setRows, monthlyData, setMonthlyData, monthlyOffset, setMonthlyOffset, monthlyDayOffset, setMonthlyDayOffset, now, baseYear, sortMode, activeTool, setActiveTool, paintColor, hoveredMonthlyTaskRef, commitHistory, isWideMode, activeTheme }) => {
+  const trackRef = useRef(null);
+  const MONTHLY_TRACK_DAYS = 31;
+
+  // 以 (anchorYear, anchorMonth) 的 1 号为 dayIndex 0；dayIndex 可为负或超过当月天数
+  const dayIndexToCalendar = (anchorYear, anchorMonth, dayIndex) => {
+    const d = new Date(anchorYear, anchorMonth - 1, 1 + dayIndex);
+    return { y: d.getFullYear(), m: d.getMonth() + 1, d: d.getDate() };
+  };
+
+  const year = now.getFullYear();
+  const month = now.getMonth() + 1;
+  const totalMonths = (year - baseYear) * 12 + (month - 1) + monthlyOffset;
+  const displayYear = baseYear + Math.floor(totalMonths / 12);
+  const displayMonth = ((totalMonths % 12) + 12) % 12 + 1;
+  const monthKey = getMonthKey(displayYear, displayMonth);
+  const daysInMonth = new Date(displayYear, displayMonth, 0).getDate();
+  const spanRows = useMemo(() => {
+    const viewStartDayIndex = Math.floor(monthlyDayOffset);
+    const viewEndDayIndex = viewStartDayIndex + MONTHLY_TRACK_DAYS;
+    const viewStartDate = new Date(displayYear, displayMonth - 1, 1 + viewStartDayIndex);
+    const viewEndDate = new Date(displayYear, displayMonth - 1, 1 + viewEndDayIndex);
+    const viewStartMonths = (viewStartDate.getFullYear() - baseYear) * 12 + viewStartDate.getMonth();
+    const viewEndMonths = (viewEndDate.getFullYear() - baseYear) * 12 + viewEndDate.getMonth() + 1;
+
+    return rows.filter(row => {
+      if (!row.segments.some(seg => seg.start < viewEndMonths && seg.end > viewStartMonths)) return false;
+      const bgDays = getRowBackgroundDays(row, displayYear, displayMonth);
+      if (!bgDays) return false;
+      const barStartDayIdx = bgDays.startDay - 1;
+      const barEndDayIdx = bgDays.startDay - 1 + (bgDays.endDay - bgDays.startDay + 1);
+      return barStartDayIdx < viewEndDayIndex && barEndDayIdx > viewStartDayIndex;
+    });
+  }, [displayYear, displayMonth, monthlyDayOffset, rows]);
+
+  const visibleMonthKeys = useMemo(() => {
+    const startIdx = Math.floor(monthlyDayOffset);
+    const endIdx = startIdx + MONTHLY_TRACK_DAYS;
+    const startDate = new Date(displayYear, displayMonth - 1, 1 + startIdx);
+    const endDate = new Date(displayYear, displayMonth - 1, 1 + endIdx);
+    const keys = [];
+    let d = new Date(startDate.getFullYear(), startDate.getMonth() - 1, 1);
+    const endBound = new Date(endDate.getFullYear(), endDate.getMonth() + 1, 1);
+    while (d <= endBound) {
+      keys.push({ key: getMonthKey(d.getFullYear(), d.getMonth() + 1), year: d.getFullYear(), month: d.getMonth() + 1 });
+      d = new Date(d.getFullYear(), d.getMonth() + 1, 1);
+    }
+    return keys;
+  }, [displayYear, displayMonth, monthlyDayOffset]);
+
+  const taskDayIndexFromAnchor = useCallback((taskDay, taskYear, taskMonth) => {
+    const anchorDate = new Date(displayYear, displayMonth - 1, 1);
+    const taskDate = new Date(taskYear, taskMonth - 1, 1);
+    const monthDiffDays = (taskDate - anchorDate) / (24 * 60 * 60 * 1000);
+    return monthDiffDays + (taskDay - 1);
+  }, [displayYear, displayMonth]);
+
+  const ensureGroups = () => {
+    const groups = {};
+    spanRows.forEach(r => {
+      groups[r.id] = { title: r.title, tasks: [] };
+      visibleMonthKeys.forEach(mk => {
+        const mData = monthlyData[mk.key] || { groups: {} };
+        const g = mData.groups[r.id];
+        if (g && g.tasks?.length) {
+          g.tasks.forEach(t => groups[r.id].tasks.push({ ...t, _year: mk.year, _month: mk.month }));
+        }
+      });
+      if (groups[r.id].tasks.length === 0) groups[r.id].tasks = [];
+    });
+    return groups;
+  };
+  const groups = ensureGroups();
+  const ungroupedTasks = useMemo(() => {
+    const list = visibleMonthKeys.flatMap(mk => {
+      const mData = monthlyData[mk.key] || { ungroupedTasks: [] };
+      return (mData.ungroupedTasks || []).map(t => ({ ...t, _year: mk.year, _month: mk.month }));
+    });
+    return sortMode === 'time' ? [...list].sort((a, b) => {
+      const aIdx = taskDayIndexFromAnchor(a.start, a._year, a._month);
+      const bIdx = taskDayIndexFromAnchor(b.start, b._year, b._month);
+      return aIdx - bIdx;
+    }) : list;
+  }, [visibleMonthKeys, monthlyData, sortMode, taskDayIndexFromAnchor]);
+
+  const visibleDays = useMemo(() => {
+    const start = Math.floor(monthlyDayOffset);
+    return Array.from({ length: MONTHLY_TRACK_DAYS }).map((_, i) => {
+      const dayIndex = start + i;
+      const cal = dayIndexToCalendar(displayYear, displayMonth, dayIndex);
+      const leftPct = ((dayIndex - monthlyDayOffset) / MONTHLY_TRACK_DAYS) * 100;
+      return { dayIndex, day: cal.d, label: String(cal.d), leftPct, y: cal.y, m: cal.m };
+    });
+  }, [displayYear, displayMonth, monthlyDayOffset]);
+
+  const monthSpans = useMemo(() => {
+    const blocks = [];
+    let currentMonthKey = null;
+    let startPct = 0;
+    visibleDays.forEach((v, i) => {
+      const key = `${v.y}-${v.m}`;
+      if (key !== currentMonthKey) {
+        if (currentMonthKey !== null) blocks.push({ year: visibleDays[i - 1].y, month: visibleDays[i - 1].m, startPct, endPct: v.leftPct });
+        currentMonthKey = key;
+        startPct = v.leftPct;
+      }
+      if (i === visibleDays.length - 1) {
+        blocks.push({ year: v.y, month: v.m, startPct, endPct: v.leftPct + (1 / MONTHLY_TRACK_DAYS) * 100 });
+      }
+    });
+    return blocks;
+  }, [visibleDays]);
+
+  const updateMonthData = (updater, targetMonthKey) => {
+    const key = targetMonthKey ?? monthKey;
+    setMonthlyData(prev => {
+      const cur = prev[key] || { groups: {}, ungroupedTasks: [] };
+      const next = updater(cur);
+      return { ...prev, [key]: next };
+    });
+  };
+
+  const todayDay = now.getFullYear() === displayYear && now.getMonth() + 1 === displayMonth ? now.getDate() : null;
+  const todayMonthKey = getMonthKey(now.getFullYear(), now.getMonth() + 1);
+  const todayDaysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
+  const addSubTask = (annualRowId) => {
+    const row = spanRows.find(r => r.id === annualRowId);
+    const hourFrac = (now.getHours() * 60 + now.getMinutes()) / (24 * 60);
+    const startDay = now.getDate() + hourFrac;
+    const endDay = Math.min(todayDaysInMonth + 1, startDay + 6);
+    updateMonthData(d => {
+      const g = d.groups[annualRowId] || { title: row?.title || '', tasks: [] };
+      const tasks = [...g.tasks, { id: Date.now().toString(), name: '新任务', start: startDay, end: endDay, color: DEFAULT_BAR_COLOR }];
+      return { ...d, groups: { ...d.groups, [annualRowId]: { ...g, tasks } } };
+    }, todayMonthKey);
+  };
+  const addUngroupedTask = () => {
+    const hourFrac = (now.getHours() * 60 + now.getMinutes()) / (24 * 60);
+    const startDay = now.getDate() + hourFrac;
+    const endDay = Math.min(todayDaysInMonth + 1, startDay + 6);
+    updateMonthData(d => ({
+      ...d,
+      ungroupedTasks: [...(d.ungroupedTasks || []), { id: Date.now().toString(), name: '其他任务', start: startDay, end: endDay, color: DEFAULT_BAR_COLOR }]
+    }), todayMonthKey);
+  };
+  const updateTask = (groupId, taskId, updates, taskMonthKey) => {
+    const targetKey = taskMonthKey ?? monthKey;
+    if (groupId) {
+      updateMonthData(d => {
+        const g = d.groups[groupId];
+        if (!g) return d;
+        const tasks = g.tasks.map(t => t.id === taskId ? { ...t, ...updates } : t);
+        return { ...d, groups: { ...d.groups, [groupId]: { ...g, tasks } } };
+      }, targetKey);
+    } else {
+      updateMonthData(d => ({
+        ...d,
+        ungroupedTasks: (d.ungroupedTasks || []).map(t => t.id === taskId ? { ...t, ...updates } : t)
+      }), targetKey);
+    }
+  };
+  const deleteTask = (groupId, taskId, taskMonthKey) => {
+    const targetKey = taskMonthKey ?? monthKey;
+    if (groupId) {
+      updateMonthData(d => {
+        const g = d.groups[groupId];
+        if (!g) return d;
+        const tasks = g.tasks.filter(t => t.id !== taskId);
+        return { ...d, groups: { ...d.groups, [groupId]: { ...g, tasks } } };
+      }, targetKey);
+    } else {
+      updateMonthData(d => ({ ...d, ungroupedTasks: (d.ungroupedTasks || []).filter(t => t.id !== taskId) }), targetKey);
+    }
+  };
+
+  const rowH = isWideMode ? ROW_HEIGHT_MONTHLY_WIDE : ROW_HEIGHT_MONTHLY;
+
+  const handleCutMonthlyTask = useCallback((rowId, taskId, isGrouped, cutDay, taskMonthKey) => {
+    const MIN_GAP = 1 / 24;
+    if (cutDay <= MIN_GAP || cutDay >= daysInMonth - MIN_GAP) return;
+    commitHistory?.();
+    const task = isGrouped ? (groups[rowId]?.tasks || []).find(t => t.id === taskId) : ungroupedTasks.find(t => t.id === taskId);
+    if (!task || cutDay <= task.start + MIN_GAP || cutDay >= task.end - MIN_GAP) return;
+    const targetKey = taskMonthKey ?? (task._year != null ? getMonthKey(task._year, task._month) : monthKey);
+    const cutDayRounded = Math.round(cutDay * 24) / 24;
+    const newTask = { ...task, id: Date.now().toString(), name: '新任务', start: cutDayRounded, end: task.end, isAcknowledged: false };
+    if (isGrouped) {
+      updateMonthData(d => {
+        const g = d.groups[rowId];
+        if (!g) return d;
+        const idx = g.tasks.findIndex(t => t.id === taskId);
+        if (idx === -1) return d;
+        const tasks = [...g.tasks];
+        tasks[idx] = { ...task, end: cutDayRounded, isAcknowledged: false };
+        tasks.splice(idx + 1, 0, newTask);
+        return { ...d, groups: { ...d.groups, [rowId]: { ...g, tasks } } };
+      }, targetKey);
+    } else {
+      updateMonthData(d => {
+        const tasks = [...(d.ungroupedTasks || [])];
+        const idx = tasks.findIndex(t => t.id === taskId);
+        if (idx === -1) return d;
+        tasks[idx] = { ...task, end: cutDayRounded, isAcknowledged: false };
+        tasks.splice(idx + 1, 0, newTask);
+        return { ...d, ungroupedTasks: tasks };
+      }, targetKey);
+    }
+  }, [daysInMonth, updateMonthData, groups, ungroupedTasks, commitHistory, monthKey]);
+
+  const handleMonthlyBarPointerDown = useCallback((e, rowId, task, isGrouped) => {
+    e.stopPropagation();
+    if (e.target.tagName?.toLowerCase() === 'input') return;
+    if (e.button !== 0) return;
+    const rect = trackRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    const trackX = e.clientX - rect.left;
+    if (activeTool === 'cut') {
+      const cutDay = monthlyDayOffset + (trackX / rect.width) * MONTHLY_TRACK_DAYS;
+      const taskMonthKey = task._year != null ? getMonthKey(task._year, task._month) : monthKey;
+      handleCutMonthlyTask(rowId, task.id, isGrouped, cutDay, taskMonthKey);
+      return;
+    }
+    const barRect = e.currentTarget.getBoundingClientRect();
+    const xInBar = e.clientX - barRect.left;
+    const isLeftEdge = xInBar < 12;
+    const isRightEdge = xInBar > barRect.width - 12;
+    let action = 'move';
+    if (isLeftEdge) action = 'start';
+    if (isRightEdge) action = 'end';
+
+    const startX = e.clientX;
+    const initialStart = task.start;
+    const initialEnd = task.end;
+    const dur = initialEnd - initialStart;
+    const SNAP = 1 / 24;
+    let lastS = initialStart;
+    let lastE = initialEnd;
+
+    const onMove = (moveE) => {
+      const dx = moveE.clientX - startX;
+      const dayWidth = rect.width / MONTHLY_TRACK_DAYS;
+      const timeDelta = dx / dayWidth;
+      let tS = initialStart + timeDelta;
+      let tE = initialEnd + timeDelta;
+      if (action === 'move') {
+        tE = tS + dur;
+        const sS = Math.round(tS);
+        if (Math.abs(tS - sS) < SNAP) { tS = sS; tE = tS + dur; }
+        tS = Math.round(tS * 24) / 24;
+        tE = Math.round(tE * 24) / 24;
+      } else if (action === 'start') {
+        tS = initialStart + timeDelta;
+        const sS = Math.round(tS);
+        if (Math.abs(tS - sS) < SNAP) tS = sS;
+        tS = Math.min(initialEnd - SNAP, Math.round(tS * 24) / 24);
+        tE = initialEnd;
+      } else {
+        tE = initialEnd + timeDelta;
+        const sE = Math.round(tE);
+        if (Math.abs(tE - sE) < SNAP) tE = sE;
+        tE = Math.max(initialStart + SNAP, Math.round(tE * 24) / 24);
+        tS = initialStart;
+      }
+      if (tS < tE) {
+        lastS = tS;
+        lastE = tE;
+        const hourFrac = (now.getHours() * 60 + now.getMinutes()) / (24 * 60);
+        const taskYear = task._year ?? displayYear;
+        const taskMonth = task._month ?? displayMonth;
+        const tEndAbs = taskDayIndexFromAnchor(tE, taskYear, taskMonth);
+        const todayAbs = Math.round((new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime() - new Date(displayYear, displayMonth - 1, 1).getTime()) / (24 * 60 * 60 * 1000)) + hourFrac;
+        const pastLine = tEndAbs > todayAbs;
+        const patch = { start: tS, end: tE };
+        if (pastLine) patch.isAcknowledged = false;
+        const taskMonthKey = task._year != null ? getMonthKey(task._year, task._month) : undefined;
+        if (isGrouped) updateTask(rowId, task.id, patch, taskMonthKey);
+        else updateTask(null, task.id, patch, taskMonthKey);
+      }
+    };
+    const onUp = () => {
+      window.removeEventListener('pointermove', onMove);
+      window.removeEventListener('pointerup', onUp);
+
+      const taskYear = task._year ?? displayYear;
+      const taskMonth = task._month ?? displayMonth;
+      const currentMonthKey = getMonthKey(taskYear, taskMonth);
+      const actualStartDate = new Date(taskYear, taskMonth - 1, Math.floor(lastS));
+      const newYear = actualStartDate.getFullYear();
+      const newMonth = actualStartDate.getMonth() + 1;
+      const newMonthKey = getMonthKey(newYear, newMonth);
+
+      if (newMonthKey !== currentMonthKey) {
+        const newMonthFirst = new Date(newYear, newMonth - 1, 1);
+        const oldMonthFirst = new Date(taskYear, taskMonth - 1, 1);
+        const dayShift = (oldMonthFirst - newMonthFirst) / (24 * 60 * 60 * 1000);
+        const newStart = lastS + dayShift;
+        const newEnd = lastE + dayShift;
+        const taskData = { ...task, start: newStart, end: newEnd };
+        delete taskData._year;
+        delete taskData._month;
+        deleteTask(isGrouped ? rowId : null, task.id, currentMonthKey);
+        if (isGrouped) {
+          const row = spanRows.find(r => r.id === rowId);
+          const groupTitle = row?.title ?? '';
+          updateMonthData(d => {
+            const g = d.groups[rowId] || { title: groupTitle, tasks: [] };
+            return { ...d, groups: { ...d.groups, [rowId]: { ...g, tasks: [...g.tasks, taskData] } } };
+          }, newMonthKey);
+        } else {
+          updateMonthData(d => ({
+            ...d, ungroupedTasks: [...(d.ungroupedTasks || []), taskData]
+          }), newMonthKey);
+        }
+      }
+    };
+    window.addEventListener('pointermove', onMove);
+    window.addEventListener('pointerup', onUp);
+  }, [displayYear, displayMonth, spanRows, updateTask, now, taskDayIndexFromAnchor, deleteTask, updateMonthData]);
+
+  const handleHeaderPointerDown = (e) => {
+    if (e.target.tagName.toLowerCase() === 'input') return;
+    e.preventDefault();
+    const target = e.currentTarget;
+    const pointerId = e.pointerId;
+    target.setPointerCapture?.(pointerId);
+    const startX = e.clientX;
+    const initialMonthlyOffset = monthlyOffset;
+    const initialDayOffset = monthlyDayOffset;
+    const trackWidth = trackRef.current?.getBoundingClientRect()?.width || 1;
+
+    const initialAbsDays = (() => {
+      const totalMonths = (now.getFullYear() - baseYear) * 12 + now.getMonth() + initialMonthlyOffset;
+      const y = baseYear + Math.floor(totalMonths / 12);
+      const m = ((totalMonths % 12) + 12) % 12;
+      const firstDay = new Date(y, m, 1);
+      return firstDay.getTime() / (24 * 60 * 60 * 1000) + initialDayOffset;
+    })();
+
+    const onMove = (moveE) => {
+      const dx = moveE.clientX - startX;
+      const deltaDays = -(dx / trackWidth) * MONTHLY_TRACK_DAYS;
+      const newAbsDays = initialAbsDays + deltaDays;
+
+      const refMs = newAbsDays * 24 * 60 * 60 * 1000;
+      const refDate = new Date(refMs);
+      const targetYear = refDate.getFullYear();
+      const targetMonth = refDate.getMonth();
+      const dayInMonth = refDate.getDate() - 1;
+
+      const totalMonthsNow = (now.getFullYear() - baseYear) * 12 + now.getMonth();
+      const totalMonthsTarget = (targetYear - baseYear) * 12 + targetMonth;
+      setMonthlyOffset(totalMonthsTarget - totalMonthsNow);
+      setMonthlyDayOffset(dayInMonth);
+    };
+
+    const onUp = () => {
+      target.releasePointerCapture?.(pointerId);
+      window.removeEventListener('pointermove', onMove);
+      window.removeEventListener('pointerup', onUp);
+    };
+    window.addEventListener('pointermove', onMove);
+    window.addEventListener('pointerup', onUp);
+  };
+
+  const todayDayIndex = useMemo(() => {
+    const anchorStart = new Date(displayYear, displayMonth - 1, 1).getTime();
+    const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+    return Math.round((todayStart - anchorStart) / (24 * 60 * 60 * 1000));
+  }, [displayYear, displayMonth, now]);
+  const todayColLeft = `${((todayDayIndex - monthlyDayOffset) / MONTHLY_TRACK_DAYS) * 100}%`;
+  const todayColWidth = `${(1 / MONTHLY_TRACK_DAYS) * 100}%`;
+
+  return (
+    <div className="w-full flex flex-col relative" style={{ cursor: activeTool === 'cut' || activeTool === 'paint' ? 'crosshair' : 'default' }}>
+      <div className="flex gap-4 mb-1 border-b border-white/20 pb-1 cursor-grab active:cursor-grabbing group/header" onPointerDown={handleHeaderPointerDown}>
+        <div className="w-[140px] shrink-0 flex flex-col justify-end gap-0">
+          <div className="h-[18px]" />
+          <div className="h-[20px] flex items-center gap-0">
+          <input
+            key={`yr-${displayYear}-${displayMonth}`}
+            type="text"
+            defaultValue={displayYear}
+            onBlur={(e) => {
+              const y = parseInt(String(e.target.value).replace(/\D/g, ''), 10);
+              if (!isNaN(y) && y >= 1900 && y <= 2100) {
+                const totalMonthsNow = (now.getFullYear() - baseYear) * 12 + (now.getMonth() + 1) - 1;
+                const totalMonthsTarget = (y - baseYear) * 12;
+                setMonthlyOffset(totalMonthsTarget - totalMonthsNow);
+                setMonthlyDayOffset(0);
+              } else {
+                e.target.value = String(displayYear);
+              }
+            }}
+            onKeyDown={(e) => { if (e.key === 'Enter') e.target.blur(); }}
+            onClick={(e) => e.stopPropagation()}
+            onPointerDown={(e) => e.stopPropagation()}
+            className="w-12 bg-transparent text-[10px] font-black text-white/70 focus:outline-none px-1"
+            style={{ WebkitAppRegion: 'no-drag' }}
+          />
+          <span className="text-[10px] font-black text-white/70">年</span>
+          </div>
+        </div>
+        <div className="flex-1 flex flex-col relative" ref={trackRef}>
+          <div className="relative w-full overflow-hidden h-[18px]">
+            <div className="flex w-full overflow-hidden h-[18px]">
+              {monthSpans.map((span, i) => {
+                const left = Math.max(0, span.startPct);
+                const right = Math.min(100, span.endPct);
+                const width = right - left;
+                if (width <= 0) return null;
+                return (
+                  <div key={i} className="absolute top-0 bottom-0 p-[1px] border-l border-white/5" style={{ left: `${left}%`, width: `${width}%` }}>
+                    <div className="bg-neutral-800/80 w-full h-full rounded-[4px] flex items-center px-2 overflow-hidden">
+                      <span className="text-[10px] font-black text-white/70 whitespace-nowrap">{span.month}月</span>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+          <div className="relative w-full h-[20px] flex items-center overflow-hidden pointer-events-none min-w-0">
+            {visibleDays.map((d, i) => (
+              <div key={`${d.y}-${d.m}-${d.dayIndex}`} className={`absolute text-[10px] font-bold pl-0.5 truncate overflow-hidden z-10 ${d.y === now.getFullYear() && d.m === now.getMonth() + 1 && d.day === now.getDate() ? 'text-amber-200' : 'text-white/50'}`} style={{ left: `${d.leftPct}%`, width: `${100 / MONTHLY_TRACK_DAYS}%` }}>{d.label}</div>
+            ))}
+          </div>
+        </div>
+      </div>
+      <div className="w-full relative flex flex-col">
+        {/* Mask layer: background bar + subtask bars (same as annual view 838-866) */}
+        <div className="absolute top-0 bottom-0 left-0 pointer-events-none z-10" style={{
+          right: '-24px',
+          maskImage: 'linear-gradient(to right, transparent 0px, transparent 140px, black 156px, black calc(100% - 24px), transparent 100%)',
+          WebkitMaskImage: 'linear-gradient(to right, transparent 0px, transparent 140px, black 156px, black calc(100% - 24px), transparent 100%)'
+        }}>
+          <div className="absolute top-0 bottom-0 left-[156px] pointer-events-auto overflow-visible" style={{ right: '24px' }}>
+            {(() => {
+              let cumulativeTop = 0;
+              return (
+                <>
+                  {spanRows.map(row => {
+                    const g = groups[row.id] || { title: row.title, tasks: [] };
+                    const taskRows = sortMode === 'time' ? [...(g.tasks || [])].sort((a, b) => {
+                      const aIdx = taskDayIndexFromAnchor(a.start, a._year, a._month);
+                      const bIdx = taskDayIndexFromAnchor(b.start, b._year, b._month);
+                      return aIdx - bIdx;
+                    }) : (g.tasks || []);
+                    const rowHeight = Math.max(1, taskRows.length) * rowH;
+                    const top = cumulativeTop;
+                    cumulativeTop += rowHeight + 1;
+                    const bgDays = getRowBackgroundDays(row, displayYear, displayMonth);
+                    const viewStartDate = new Date(displayYear, displayMonth - 1, 1 + Math.floor(monthlyDayOffset));
+                    const viewEndDate = new Date(displayYear, displayMonth - 1, 1 + Math.floor(monthlyDayOffset) + MONTHLY_TRACK_DAYS);
+                    const viewStartMonths = (viewStartDate.getFullYear() - baseYear) * 12 + viewStartDate.getMonth();
+                    const viewEndMonths = (viewEndDate.getFullYear() - baseYear) * 12 + viewEndDate.getMonth() + 1;
+                    const overlapSeg = row.segments.find(s => s.start < viewEndMonths && s.end > viewStartMonths);
+                    const bgColor = overlapSeg?.color || DEFAULT_BAR_COLOR;
+                    return (
+                      <div key={row.id} className="absolute left-0 right-0" style={{ top, height: rowHeight }}>
+                        {bgDays && (
+                          <div className="absolute top-0 bottom-0 rounded-[4px] border border-white/5 z-[1]" style={{
+                            left: `${((bgDays.startDay - 1 - monthlyDayOffset) / MONTHLY_TRACK_DAYS) * 100}%`,
+                            width: `${((bgDays.endDay - bgDays.startDay + 1) / MONTHLY_TRACK_DAYS) * 100}%`,
+                            backgroundColor: bgColor,
+                            pointerEvents: activeTool === 'paint' ? 'auto' : 'none',
+                            cursor: activeTool === 'paint' ? 'crosshair' : 'default'
+                          }}
+                          onClick={() => {
+                            if (activeTool === 'paint') {
+                              commitHistory();
+                              const newColor = hexToRgba(paintColor, 0.4);
+                              setRows(prev => prev.map(r => {
+                                if (r.id !== row.id) return r;
+                                return { ...r, segments: r.segments.map(seg => {
+                                  if (seg.start < viewEndMonths && seg.end > viewStartMonths) return { ...seg, color: newColor };
+                                  return seg;
+                                })};
+                              }));
+                              setActiveTool("pointer");
+                            }
+                          }} />
+                        )}
+                        {taskRows.map(t => {
+                          const tYear = t._year ?? displayYear;
+                          const tMonth = t._month ?? displayMonth;
+                          const tStartIdx = taskDayIndexFromAnchor(t.start, tYear, tMonth);
+                          const tEndIdx = taskDayIndexFromAnchor(t.end, tYear, tMonth);
+                          const hourFrac = (now.getHours() * 60 + now.getMinutes()) / (24 * 60);
+                          const currentPos = todayDayIndex + hourFrac;
+                          const barLeft = tStartIdx, barRight = tEndIdx;
+                          const prog = currentPos == null ? 0 : currentPos < barLeft ? 0 : currentPos >= barRight ? 100 : ((currentPos - barLeft) / (barRight - barLeft)) * 100;
+                          const isAck = t.isAcknowledged || false;
+                          const barBg = isAck ? 'rgba(16, 185, 129, 0.05)' : t.color;
+                          const progColor = isAck ? 'rgba(16, 185, 129, 0.2)' : getDynamicProgressColor(prog);
+                          const taskMonthKey = t._year != null ? getMonthKey(t._year, t._month) : monthKey;
+                          return (
+                            <div key={t.id} className="absolute left-0 right-0 group/bar z-[5]" style={{ top: taskRows.indexOf(t) * rowH, height: rowH }}
+                              onMouseEnter={() => { if (hoveredMonthlyTaskRef) hoveredMonthlyTaskRef.current = { groupId: row.id, taskId: t.id, monthKey: taskMonthKey }; }}
+                              onMouseLeave={() => { if (hoveredMonthlyTaskRef) hoveredMonthlyTaskRef.current = null; }}>
+                              <div
+                                className={`absolute inset-y-0 rounded-[4px] overflow-visible border border-white/5 ${activeTool === 'cut' ? 'cursor-crosshair' : 'cursor-grab active:cursor-grabbing hover:outline hover:outline-1 hover:outline-white/30'}`}
+                                style={{
+                                  left: `${((tStartIdx - monthlyDayOffset) / MONTHLY_TRACK_DAYS) * 100}%`,
+                                  width: `${((tEndIdx - tStartIdx) / MONTHLY_TRACK_DAYS) * 100}%`,
+                                  backgroundColor: barBg
+                                }}
+                                onPointerDown={e => {
+                                  if (activeTool === 'paint') {
+                                    e.stopPropagation();
+                                    commitHistory();
+                                    const newColor = hexToRgba(paintColor, 0.4);
+                                    updateTask(row.id, t.id, { color: newColor }, taskMonthKey);
+                                    setActiveTool("pointer");
+                                    return;
+                                  }
+                                  handleMonthlyBarPointerDown(e, row.id, t, true);
+                                }}
+                                onClick={e => { if (prog === 100 && !isAck) { e.stopPropagation(); updateTask(row.id, t.id, { isAcknowledged: true }, taskMonthKey); playSuccessSound(); } }}
+                              >
+                                <div className="absolute inset-0 rounded-[4px] overflow-hidden">
+                                  <div className="absolute inset-0 transition-all" style={{ width: `${prog}%`, backgroundColor: progColor }} />
+                                </div>
+                                <div className="absolute left-0 top-0 bottom-0 w-3 cursor-ew-resize hover:bg-white/20 opacity-0 group-hover/bar:opacity-100 z-20" style={{ WebkitAppRegion: 'no-drag' }} />
+                                <div className="absolute right-0 top-0 bottom-0 w-3 cursor-ew-resize hover:bg-white/20 opacity-0 group-hover/bar:opacity-100 z-20" style={{ WebkitAppRegion: 'no-drag' }} />
+                                <MonthlyBarInput task={t} rowId={row.id} isGrouped={true} updateTask={(rid, tid, u) => updateTask(rid, tid, u, taskMonthKey)} prog={prog} isAck={isAck} />
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    );
+                  })}
+                  {/* Ungrouped tasks row */}
+                  {(() => {
+                    const top = cumulativeTop;
+                    return (
+                      <div className="absolute left-0 right-0" style={{ top, height: ungroupedTasks.length ? ungroupedTasks.length * rowH : rowH }}>
+                        {ungroupedTasks.map(t => {
+                          const tYear = t._year ?? displayYear;
+                          const tMonth = t._month ?? displayMonth;
+                          const tStartIdx = taskDayIndexFromAnchor(t.start, tYear, tMonth);
+                          const tEndIdx = taskDayIndexFromAnchor(t.end, tYear, tMonth);
+                          const hourFrac = (now.getHours() * 60 + now.getMinutes()) / (24 * 60);
+                          const currentPos = todayDayIndex + hourFrac;
+                          const barLeft = tStartIdx, barRight = tEndIdx;
+                          const prog = currentPos == null ? 0 : currentPos < barLeft ? 0 : currentPos >= barRight ? 100 : ((currentPos - barLeft) / (barRight - barLeft)) * 100;
+                          const isAck = t.isAcknowledged || false;
+                          const barBg = isAck ? 'rgba(16, 185, 129, 0.05)' : t.color;
+                          const progColor = isAck ? 'rgba(16, 185, 129, 0.2)' : getDynamicProgressColor(prog);
+                          const taskMonthKey = t._year != null ? getMonthKey(t._year, t._month) : monthKey;
+                          return (
+                            <div key={t.id} className="absolute left-0 right-0 group/bar z-[5]" style={{ top: ungroupedTasks.indexOf(t) * rowH, height: rowH }}
+                              onMouseEnter={() => { if (hoveredMonthlyTaskRef) hoveredMonthlyTaskRef.current = { groupId: null, taskId: t.id, monthKey: taskMonthKey }; }}
+                              onMouseLeave={() => { if (hoveredMonthlyTaskRef) hoveredMonthlyTaskRef.current = null; }}>
+                              <div
+                                className={`absolute inset-y-0 rounded-[4px] overflow-visible border border-white/5 ${activeTool === 'cut' ? 'cursor-crosshair' : 'cursor-grab active:cursor-grabbing hover:outline hover:outline-1 hover:outline-white/30'}`}
+                                style={{
+                                  left: `${((tStartIdx - monthlyDayOffset) / MONTHLY_TRACK_DAYS) * 100}%`,
+                                  width: `${((tEndIdx - tStartIdx) / MONTHLY_TRACK_DAYS) * 100}%`,
+                                  backgroundColor: barBg
+                                }}
+                                onPointerDown={e => {
+                                  if (activeTool === 'paint') {
+                                    e.stopPropagation();
+                                    commitHistory();
+                                    const newColor = hexToRgba(paintColor, 0.4);
+                                    updateTask(null, t.id, { color: newColor }, taskMonthKey);
+                                    setActiveTool("pointer");
+                                    return;
+                                  }
+                                  handleMonthlyBarPointerDown(e, null, t, false);
+                                }}
+                                onClick={e => { if (prog === 100 && !isAck) { e.stopPropagation(); updateTask(null, t.id, { isAcknowledged: true }, taskMonthKey); playSuccessSound(); } }}
+                              >
+                                <div className="absolute inset-0 rounded-[4px] overflow-hidden">
+                                  <div className="absolute inset-0 transition-all" style={{ width: `${prog}%`, backgroundColor: progColor }} />
+                                </div>
+                                <div className="absolute left-0 top-0 bottom-0 w-3 cursor-ew-resize hover:bg-white/20 opacity-0 group-hover/bar:opacity-100 z-20" style={{ WebkitAppRegion: 'no-drag' }} />
+                                <div className="absolute right-0 top-0 bottom-0 w-3 cursor-ew-resize hover:bg-white/20 opacity-0 group-hover/bar:opacity-100 z-20" style={{ WebkitAppRegion: 'no-drag' }} />
+                                <MonthlyBarInput task={t} rowId={null} isGrouped={false} updateTask={(rid, tid, u) => updateTask(rid, tid, u, taskMonthKey)} prog={prog} isAck={isAck} />
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    );
+                  })()}
+                </>
+              );
+            })()}
+          </div>
+        </div>
+
+        {/* Normal flow: title + grid only */}
+        <div className="flex flex-col gap-0">
+        {spanRows.map(row => {
+          const g = groups[row.id] || { title: row.title, tasks: [] };
+          const taskRows = sortMode === 'time' ? [...(g.tasks || [])].sort((a, b) => {
+            const aIdx = taskDayIndexFromAnchor(a.start, a._year ?? displayYear, a._month ?? displayMonth);
+            const bIdx = taskDayIndexFromAnchor(b.start, b._year ?? displayYear, b._month ?? displayMonth);
+            return aIdx - bIdx;
+          }) : (g.tasks || []);
+          const rowHeight = Math.max(1, taskRows.length) * rowH;
+          return (
+            <div key={row.id} className="border-b border-white/5">
+              <div className="flex gap-4 items-start group/grp" style={{ minHeight: rowHeight }}>
+                <div className="w-[140px] shrink-0 pl-1 pt-1 flex items-start justify-between relative z-20" style={{ minHeight: rowHeight }}>
+                  <span className="text-[11px] font-bold text-white/80 flex-1" style={{ textAlign: 'left' }}>{g.title}</span>
+                  <button onClick={() => addSubTask(row.id)} className="opacity-0 group-hover/grp:opacity-100 text-white/30 hover:text-white/60 p-1"><Plus className="w-3 h-3" /></button>
+                </div>
+                <div className="flex-1 relative overflow-hidden" style={{ height: rowHeight, minHeight: rowHeight }}>
+                  {Array.from({ length: MONTHLY_TRACK_DAYS + 1 }).map((_, i) => {
+                    const start = Math.floor(monthlyDayOffset);
+                    const lineLeft = ((start + i - monthlyDayOffset) / MONTHLY_TRACK_DAYS) * 100;
+                    return <div key={`grid-${i}`} className="absolute top-0 bottom-0 border-l border-white/5 pointer-events-none z-[2]" style={{ left: `${lineLeft}%` }} />;
+                  })}
+                </div>
+              </div>
+            </div>
+          );
+        })}
+        <div className="flex gap-4 items-start border-b border-white/5" style={{ minHeight: rowH }}>
+          <div className="w-[140px] shrink-0 pl-1 pt-1 flex items-start justify-between relative z-20">
+            <span className="text-[10px] text-white/40">其他任务</span>
+            <button onClick={addUngroupedTask} className="text-white/30 hover:text-white/60 p-1"><Plus className="w-3 h-3" /></button>
+          </div>
+          <div className="flex-1 relative overflow-hidden" style={{ height: ungroupedTasks.length ? ungroupedTasks.length * rowH : rowH, minHeight: ungroupedTasks.length ? ungroupedTasks.length * rowH : rowH }}>
+            {Array.from({ length: MONTHLY_TRACK_DAYS + 1 }).map((_, i) => {
+              const start = Math.floor(monthlyDayOffset);
+              const lineLeft = ((start + i - monthlyDayOffset) / MONTHLY_TRACK_DAYS) * 100;
+              return <div key={`ugrid-${i}`} className="absolute top-0 bottom-0 border-l border-white/5 pointer-events-none" style={{ left: `${lineLeft}%` }} />;
+            })}
+          </div>
+        </div>
+        </div>
+
+        {/* Yellow line + triangle markers + star bursts: outside mask, z-[100] */}
+        <div className="absolute top-0 bottom-0 left-[156px] right-0 pointer-events-none z-[100] overflow-visible">
+          {/* Star bursts for completed tasks - rendered on top layer so not clipped by mask */}
+          {(() => {
+            const bursts = [];
+            let cumTop = 0;
+            spanRows.forEach(row => {
+              const g = groups[row.id] || { tasks: [] };
+              const taskRows = sortMode === 'time' ? [...(g.tasks || [])].sort((a, b) => {
+                const aIdx = taskDayIndexFromAnchor(a.start, a._year ?? displayYear, a._month ?? displayMonth);
+                const bIdx = taskDayIndexFromAnchor(b.start, b._year ?? displayYear, b._month ?? displayMonth);
+                return aIdx - bIdx;
+              }) : (g.tasks || []);
+              const rowHeight = Math.max(1, taskRows.length) * rowH;
+              taskRows.forEach((t, idx) => {
+                const tYear = t._year ?? displayYear;
+                const tMonth = t._month ?? displayMonth;
+                const tEndIdx = taskDayIndexFromAnchor(t.end, tYear, tMonth);
+                const hourFrac = (now.getHours() * 60 + now.getMinutes()) / (24 * 60);
+                const currentPos = todayDayIndex + hourFrac;
+                const barRight = tEndIdx;
+                const prog = currentPos == null ? 0 : currentPos < taskDayIndexFromAnchor(t.start, tYear, tMonth) ? 0 : currentPos >= barRight ? 100 : ((currentPos - taskDayIndexFromAnchor(t.start, tYear, tMonth)) / (barRight - taskDayIndexFromAnchor(t.start, tYear, tMonth))) * 100;
+                if (prog === 100 && !t.isAcknowledged) {
+                  const leftPct = ((tEndIdx - monthlyDayOffset) / MONTHLY_TRACK_DAYS) * 100;
+                  const top = cumTop + idx * rowH + rowH / 2 - 12;
+                  bursts.push({ key: `${row.id}-${t.id}`, leftPct, top });
+                }
+              });
+              cumTop += rowHeight + 1;
+            });
+            ungroupedTasks.forEach((t, idx) => {
+              const tYear = t._year ?? displayYear;
+              const tMonth = t._month ?? displayMonth;
+              const tEndIdx = taskDayIndexFromAnchor(t.end, tYear, tMonth);
+              const hourFrac = (now.getHours() * 60 + now.getMinutes()) / (24 * 60);
+              const currentPos = todayDayIndex + hourFrac;
+              const barRight = tEndIdx;
+              const prog = currentPos == null ? 0 : currentPos < taskDayIndexFromAnchor(t.start, tYear, tMonth) ? 0 : currentPos >= barRight ? 100 : ((currentPos - taskDayIndexFromAnchor(t.start, tYear, tMonth)) / (barRight - taskDayIndexFromAnchor(t.start, tYear, tMonth))) * 100;
+              if (prog === 100 && !t.isAcknowledged) {
+                const leftPct = ((tEndIdx - monthlyDayOffset) / MONTHLY_TRACK_DAYS) * 100;
+                const top = cumTop + idx * rowH + rowH / 2 - 12;
+                bursts.push({ key: `ug-${t.id}`, leftPct, top });
+              }
+            });
+            return bursts.map(b => (
+              <div key={b.key} className="absolute flex items-center justify-center pointer-events-none" style={{ left: `${b.leftPct}%`, top: b.top }}>
+                <NintendoStarBurst loop />
+              </div>
+            ));
+          })()}
+          {(() => {
+            const start = Math.floor(monthlyDayOffset);
+            const todayInVisible = todayDayIndex >= start && todayDayIndex < start + MONTHLY_TRACK_DAYS;
+            return (
+              <>
+                {todayInVisible && (
+                  <>
+                    <div className="absolute inset-0 pointer-events-none">
+                      <div className={`absolute inset-0 pointer-events-none ${activeTheme.todayBg}`} style={{ left: todayColLeft, width: todayColWidth }} />
+                    </div>
+                    <div className="absolute top-0 bottom-0 left-0 right-0 pointer-events-none">
+                      {(() => {
+                        const hourFrac = (now.getHours() * 60 + now.getMinutes()) / (24 * 60);
+                        const dayFrac = todayDayIndex + hourFrac - monthlyDayOffset;
+                        const leftPct = (dayFrac / MONTHLY_TRACK_DAYS) * 100;
+                        return (
+                          <div className={`absolute top-0 bottom-0 w-[1px] ${activeTheme.todayLine}`} style={{ left: `${leftPct}%` }}>
+                            <div className={`absolute top-0 left-[0.5px] -translate-x-1/2 w-0 h-0 border-x-[3.5px] border-x-transparent border-t-[5px] ${activeTheme.todayArrow}`} />
+                          </div>
+                        );
+                      })()}
+                    </div>
+                  </>
+                )}
+                {!todayInVisible && todayDayIndex < start && (
+                  <div
+                    className="absolute left-0 top-1/2 -translate-y-1/2 z-[101] cursor-pointer pointer-events-auto hover:opacity-100 animate-blink-soft"
+                    onClick={() => { setMonthlyOffset(0); setMonthlyDayOffset(0); }}
+                    title="回到今天"
+                  >
+                    <div className="w-0 h-0 border-y-[8px] border-y-transparent border-r-[10px]" style={{ borderRightColor: activeTheme.todayColor }} />
+                  </div>
+                )}
+                {!todayInVisible && todayDayIndex >= start + MONTHLY_TRACK_DAYS && (
+                  <div
+                    className="absolute right-0 top-1/2 -translate-y-1/2 z-[101] cursor-pointer pointer-events-auto hover:opacity-100 animate-blink-soft"
+                    onClick={() => { setMonthlyOffset(0); setMonthlyDayOffset(0); }}
+                    title="回到今天"
+                  >
+                    <div className="w-0 h-0 border-y-[8px] border-y-transparent border-l-[10px]" style={{ borderLeftColor: activeTheme.todayColor }} />
+                  </div>
+                )}
+              </>
+            );
+          })()}
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// ==========================================
+// To-Do List (昨日/今日/明日)
+// ==========================================
+const fmtDate = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+const fmtLabel = (d) => `${d.getMonth() + 1}月${d.getDate()}日`;
+
+const TodoItem = ({ it, dateKey, index, updateItem, removeItem, lastAddedRef, activeTheme, addItem }) => {
+  const inputRef = useRef(null);
+  const [burstKey, setBurstKey] = useState(0);
+
+  useEffect(() => {
+    if (lastAddedRef.current?.dateKey === dateKey && lastAddedRef.current?.id === it.id) {
+      inputRef.current?.focus();
+      lastAddedRef.current = null;
+    }
+  }, [dateKey, it.id, lastAddedRef]);
+  
+  const handleBlur = () => {
+    const v = (inputRef.current?.value ?? '').trim();
+    if (v !== it.text) updateItem(dateKey, it.id, { text: v });
+  };
+
+  const toggleCompleted = () => {
+    if (it.isCompleted) {
+      updateItem(dateKey, it.id, { isCompleted: false, completedAt: null });
+    } else {
+      const now = new Date();
+      const timeStr = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+      updateItem(dateKey, it.id, { isCompleted: true, completedAt: timeStr });
+      setBurstKey(Date.now());
+      playSuccessSound();
+    }
+  };
+
+  const handleKeyDown = (e) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      const v = (inputRef.current?.value ?? '').trim();
+      
+      if (it.isCompleted || v !== it.text || v === '') {
+        // Scene A: completed task, or has changes, or empty -> Insert new line below
+        if (v !== it.text) updateItem(dateKey, it.id, { text: v });
+        addItem(dateKey, it.id);
+      } else {
+        // Scene B: no changes, not completed -> Toggle completion status
+        inputRef.current?.blur();
+        toggleCompleted();
+      }
+      return;
+    }
+    if (e.key === 'Backspace' || e.key === 'Delete') {
+      const val = inputRef.current?.value ?? '';
+      if (val === '') {
+        e.preventDefault();
+        removeItem(dateKey, it.id);
+      }
+    }
+  };
+
+  return (
+    <div className={`relative flex items-center gap-1.5 group min-w-0 select-text transition-opacity duration-200 ${it.isCompleted ? 'opacity-50' : 'opacity-100'}`} style={{ userSelect: 'text' }}>
+      <span className="shrink-0 text-[10px] text-white/40 select-none w-4">{index}.</span>
+      <button 
+        onClick={toggleCompleted} 
+        className={`shrink-0 p-0.5 rounded-full transition-colors z-10 relative ${it.isCompleted ? activeTheme.highlight.split(' ')[1] || 'text-white/70' : 'text-white/30 hover:text-white/70'}`}
+      >
+        {it.isCompleted ? <CheckCircle2 className="w-3.5 h-3.5" /> : <Circle className="w-3.5 h-3.5" />}
+        {burstKey > 0 && (
+          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 pointer-events-none scale-50">
+            <NintendoStarBurst key={burstKey} />
+          </div>
+        )}
+      </button>
+      <input ref={inputRef} type="text" defaultValue={it.text} key={`${it.id}-${it.isCompleted ? 'done' : 'open'}`}
+        onBlur={handleBlur}
+        onKeyDown={handleKeyDown}
+        placeholder="添加任务..."
+        style={{ WebkitAppRegion: 'no-drag' }}
+        className={`flex-1 min-w-0 bg-transparent text-[11px] text-white focus:outline-none placeholder:text-white/30 pointer-events-auto select-text ${it.isCompleted ? 'line-through' : ''}`} 
+      />
+      {it.isCompleted && it.completedAt && (
+        <span className="shrink-0 text-[9px] text-white/40 select-none mr-1">
+          {it.completedAt}
+        </span>
+      )}
+    </div>
+  );
+};
+
+const TodoCol = React.memo(({ dateKey, label, flex, isToday, items, addItem, updateItem, removeItem, lastAddedRef, activeTheme }) => (
+  <div className={`flex flex-col rounded-lg border border-white/10 overflow-visible ${flex} ${isToday ? activeTheme.todayBg : 'bg-white/5'}`} style={{ minWidth: 120 }}>
+    <div className="px-2 py-1.5 border-b border-white/10 text-[10px] font-bold text-white/70">{label}</div>
+    <div className="flex-1 p-2 space-y-1.5 min-h-[60px] overflow-visible select-text">
+      {items.map((it, i) => (
+        <TodoItem key={it.id} it={it} dateKey={dateKey} index={i + 1} updateItem={updateItem} removeItem={removeItem} lastAddedRef={lastAddedRef} activeTheme={activeTheme} addItem={addItem} />
+      ))}
+      <button onClick={() => addItem(dateKey)} className="w-full text-left text-[10px] text-white/40 hover:text-white/60 py-1 flex items-center gap-1">
+        <Plus className="w-3 h-3" /> 添加
+      </button>
+    </div>
+  </div>
+));
+
+const TodoListView = ({ now, todoData, setTodoData, activeTheme, commitTodoHistory }) => {
+  const lastAddedRef = useRef(null);
+  const dateKey = fmtDate(now);
+  const yesterday = useMemo(() => { const d = new Date(now); d.setDate(d.getDate() - 1); return d; }, [dateKey]);
+  const today = useMemo(() => new Date(now), [dateKey]);
+  const tomorrow = useMemo(() => { const d = new Date(now); d.setDate(d.getDate() + 1); return d; }, [dateKey]);
+  const getItems = (key) => todoData[key] || [];
+  const setItems = (key, items) => setTodoData(prev => ({ ...prev, [key]: items }));
+  const addItem = (key, afterId = null) => {
+    commitTodoHistory?.();
+    const id = Date.now().toString();
+    const items = getItems(key);
+    if (afterId != null) {
+      const idx = items.findIndex(it => it.id === afterId);
+      const insertAt = idx === -1 ? items.length : idx + 1;
+      const next = [...items.slice(0, insertAt), { id, text: '' }, ...items.slice(insertAt)];
+      setItems(key, next);
+    } else {
+      setItems(key, [...items, { id, text: '' }]);
+    }
+    lastAddedRef.current = { dateKey: key, id };
+  };
+  const updateItem = useCallback((key, id, updates) => {
+    commitTodoHistory?.();
+    setTodoData(prev => ({ ...prev, [key]: (prev[key] || []).map(it => it.id === id ? { ...it, ...updates } : it) }));
+  }, [commitTodoHistory]);
+  const removeItem = (key, id) => {
+    commitTodoHistory?.();
+    setItems(key, getItems(key).filter(it => it.id !== id));
+  };
+
+  const todayKey = fmtDate(today);
+  return (
+    <div className="w-full flex flex-col select-text">
+      <div className="text-[10px] text-white/40 uppercase tracking-wider mb-2">To do</div>
+      <div className="flex gap-4">
+        <TodoCol dateKey={fmtDate(yesterday)} label={`昨日 ${fmtLabel(yesterday)}`} flex="flex-[0.8]" isToday={false} items={getItems(fmtDate(yesterday))} addItem={addItem} updateItem={updateItem} removeItem={removeItem} lastAddedRef={lastAddedRef} activeTheme={activeTheme} />
+        <TodoCol dateKey={todayKey} label={`今日 ${fmtLabel(today)}`} flex="flex-[1.5]" isToday={true} items={getItems(todayKey)} addItem={addItem} updateItem={updateItem} removeItem={removeItem} lastAddedRef={lastAddedRef} activeTheme={activeTheme} />
+        <TodoCol dateKey={fmtDate(tomorrow)} label={`明日 ${fmtLabel(tomorrow)}`} flex="flex-[0.8]" isToday={false} items={getItems(fmtDate(tomorrow))} addItem={addItem} updateItem={updateItem} removeItem={removeItem} lastAddedRef={lastAddedRef} activeTheme={activeTheme} />
+      </div>
+    </div>
+  );
+};
+
+export default App;

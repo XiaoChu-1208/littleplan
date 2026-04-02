@@ -1,0 +1,54 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+* {
+  -webkit-app-region: no-drag;
+}
+
+html, body, #root {
+  background: transparent !important;
+}
+
+body {
+  margin: 0;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  overflow: hidden;
+}
+
+/* Ensure inputs can receive focus and text input in select-none regions */
+input, textarea {
+  -webkit-user-select: text !important;
+  user-select: text !important;
+}
+
+.gantt-scroll-area::-webkit-scrollbar {
+  width: 6px;
+}
+.gantt-scroll-area::-webkit-scrollbar-track {
+  background: transparent;
+}
+.gantt-scroll-area::-webkit-scrollbar-thumb {
+  background: rgba(255,255,255,0.15);
+  border-radius: 3px;
+}
+.gantt-scroll-area::-webkit-scrollbar-thumb:hover {
+  background: rgba(255,255,255,0.25);
+}
+
+[data-color-mode="light"] .gantt-scroll-area::-webkit-scrollbar-thumb {
+  background: rgba(0,0,0,0.12);
+}
+[data-color-mode="light"] .gantt-scroll-area::-webkit-scrollbar-thumb:hover {
+  background: rgba(0,0,0,0.2);
+}
+
+@keyframes blink-soft {
+  0%, 100% { opacity: 0.5; }
+  50% { opacity: 1; }
+}
+.animate-blink-soft {
+  animation: blink-soft 1.5s ease-in-out infinite;
+}

@@ -1,0 +1,32 @@
+<svg width="512" height="512" viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <filter id="shadowLayer"><feDropShadow dx="0" dy="4" stdDeviation="6" flood-opacity="0.15"/></filter>
+    <linearGradient id="curlGradNew" x1="0" y1="1" x2="1" y2="0">
+      <stop offset="0%" stop-color="#D6D3D1"/>
+      <stop offset="100%" stop-color="#F5F5F4"/>
+    </linearGradient>
+  </defs>
+  
+  <!-- Bottom Note -->
+  <g transform="translate(0, 25) rotate(-3 256 256)">
+    <rect x="70" y="70" width="372" height="372" fill="#FEFCE8" filter="url(#shadowLayer)"/>
+  </g>
+  
+  <!-- Middle Note -->
+  <g transform="translate(10, 10) rotate(2 256 256)">
+    <rect x="70" y="70" width="372" height="372" fill="#FFFBEB" filter="url(#shadowLayer)"/>
+  </g>
+  
+  <!-- Top Note -->
+  <g transform="rotate(-1 256 256)">
+    <path d="M70 70 H 442 V 380 L 380 442 H 70 Z" fill="#FFFCF5" filter="url(#shadowLayer)"/>
+    <path d="M442 380 L 380 442 L 380 380 Z" fill="url(#curlGradNew)"/>
+    
+    <!-- Red Pin -->
+    <circle cx="256" cy="90" r="18" fill="#EF4444" filter="drop-shadow(0 2px 2px rgba(0,0,0,0.3))"/>
+    
+    <!-- Text: Centered and Larger -->
+    <text x="256" y="240" font-family="'Courier New', monospace" font-size="80" fill="#1F2937" text-anchor="middle" font-weight="bold">little</text>
+    <text x="256" y="320" font-family="'Courier New', monospace" font-size="80" fill="#1F2937" text-anchor="middle" font-weight="bold">plan_</text>
+  </g>
+</svg>

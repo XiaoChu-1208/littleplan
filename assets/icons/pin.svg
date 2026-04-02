@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+  <!-- Head: 加粗版 (Thicker) - 脖子 4px -->
+  <path d="M7 14h10v-1.5a2 2 0 0 0-1-1.7l-0.5-.5A2 2 0 0 1 14 8.5V5h1a1 1 0 0 0 0-2h-6a1 1 0 0 0 0 2h1v3.5a2 2 0 0 1-1.5 1.8l-0.5 .5a2 2 0 0 0-1 1.7Z" />
+  <!-- Needle -->
+  <line x1="12" y1="14" x2="12" y2="22" />
+</svg>

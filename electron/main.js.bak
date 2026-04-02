@@ -1,0 +1,263 @@
+const { app, BrowserWindow, Menu, Tray, nativeImage, ipcMain, screen } = require('electron');
+const path = require('path');
+const fs = require('fs');
+
+let mainWindow;
+let pinnedHideHandler = null;
+let tray = null;
+let isPinnedState = false;
+
+const DESKTOP_LEVEL = -2147483623;
+
+function getDataPath() {
+  return path.join(app.getPath('userData'), 'plan-data.json');
+}
+
+function loadSavedData() {
+  try {
+    const raw = fs.readFileSync(getDataPath(), 'utf-8');
+    return JSON.parse(raw);
+  } catch (e) {
+    return null;
+  }
+}
+
+// --------------- Tray ---------------
+
+const TRAY_ICON_BASE64 = 'iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAMElEQVR4nGNgGOzgPxRTpJksQ9A1k2wIxQZgM4QsQJHmUQOoZMAJKCYbNFCimSgAALCTI+8tG8KPAAAAAElFTkSuQmCC';
+
+function buildTrayMenu() {
+  const label = isPinnedState ? '解除定住' : '定住窗口';
+  return Menu.buildFromTemplate([
+    {
+      label,
+      click: () => {
+        if (!mainWindow || mainWindow.isDestroyed()) return;
+        if (isPinnedState) {
+          handleUnpin();
+        } else {
+          handlePin();
+        }
+      },
+    },
+    { type: 'separator' },
+    { label: '退出', click: () => app.quit() },
+  ]);
+}
+
+function createTray() {
+  const icon = nativeImage.createFromDataURL(`data:image/png;base64,${TRAY_ICON_BASE64}`);
+  icon.setTemplateImage(true);
+  tray = new Tray(icon);
+  tray.setToolTip('GreatPlan');
+  tray.setContextMenu(buildTrayMenu());
+}
+
+function refreshTrayMenu() {
+  if (tray) tray.setContextMenu(buildTrayMenu());
+}
+
+// --------------- Pin / Unpin Logic ---------------
+
+function handlePin() {
+  if (!mainWindow || mainWindow.isDestroyed()) return;
+  isPinnedState = true;
+  refreshTrayMenu();
+
+  mainWindow.setMovable(false);
+  mainWindow.setResizable(false);
+  mainWindow.setAlwaysOnTop(true, 'normal', DESKTOP_LEVEL);
+  mainWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
+  if (process.platform === 'darwin') app.dock.hide();
+
+  pinnedHideHandler = () => {
+    if (mainWindow && !mainWindow.isDestroyed()) mainWindow.showInactive();
+  };
+  mainWindow.on('hide', pinnedHideHandler);
+  mainWindow.on('minimize', pinnedHideHandler);
+
+  mainWindow.webContents.send('force-pin');
+}
+
+function handleUnpin() {
+  if (!mainWindow || mainWindow.isDestroyed()) return;
+  isPinnedState = false;
+  refreshTrayMenu();
+
+  if (pinnedHideHandler) {
+    mainWindow.removeListener('hide', pinnedHideHandler);
+    mainWindow.removeListener('minimize', pinnedHideHandler);
+    pinnedHideHandler = null;
+  }
+  if (process.platform === 'darwin') app.dock.show();
+  mainWindow.setAlwaysOnTop(true, 'normal', 0);
+  mainWindow.setAlwaysOnTop(false);
+  mainWindow.setVisibleOnAllWorkspaces(false);
+  mainWindow.setMovable(true);
+  mainWindow.setResizable(true);
+  mainWindow.focus();
+  mainWindow.webContents.send('force-unpin');
+}
+
+ipcMain.on('set-window-pinned', (event, isPinned) => {
+  if (!mainWindow) return;
+  if (isPinned && !isPinnedState) {
+    handlePin();
+  } else if (!isPinned && isPinnedState) {
+    handleUnpin();
+  }
+});
+
+// --------------- Window Resize / Opacity ---------------
+
+ipcMain.on('resize-window', (event, w, h) => {
+  if (!mainWindow) return;
+  const bounds = mainWindow.getBounds();
+  mainWindow.setBounds({ x: bounds.x, y: bounds.y, width: w, height: h }, true);
+});
+
+ipcMain.handle('get-window-bounds', () => {
+  if (!mainWindow || mainWindow.isDestroyed()) return null;
+  return mainWindow.getBounds();
+});
+
+ipcMain.on('set-window-bounds', (event, { x, y, width, height }) => {
+  if (!mainWindow) return;
+  const bounds = {};
+  if (typeof x === 'number') bounds.x = x;
+  if (typeof y === 'number') bounds.y = y;
+  if (typeof width === 'number') bounds.width = width;
+  if (typeof height === 'number') bounds.height = height;
+  if (Object.keys(bounds).length > 0) {
+    const current = mainWindow.getBounds();
+    mainWindow.setBounds({ ...current, ...bounds }, true);
+  }
+});
+
+ipcMain.on('set-window-opacity', (event, value) => {
+  if (!mainWindow) return;
+  mainWindow.setOpacity(value);
+});
+
+// --------------- Data Persistence ---------------
+
+ipcMain.on('save-plan-data', (event, data) => {
+  try {
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      data.windowBounds = mainWindow.getBounds();
+    }
+    fs.writeFileSync(getDataPath(), JSON.stringify(data, null, 2), 'utf-8');
+  } catch (e) { /* ignore */ }
+});
+
+ipcMain.handle('load-plan-data', () => {
+  return loadSavedData();
+});
+
+// --------------- Window Creation ---------------
+
+const isDev = process.env.ELECTRON_DEV === 'true';
+
+function createWindow() {
+  const saved = loadSavedData();
+  let x, y, w = 960, h = 500;
+
+  if (saved?.windowBounds) {
+    x = saved.windowBounds.x;
+    y = saved.windowBounds.y;
+    w = saved.windowBounds.width || w;
+    h = saved.windowBounds.height || h;
+  } else {
+    const display = screen.getPrimaryDisplay();
+    const wa = display.workArea;
+    x = wa.x + 20;
+    y = wa.y + wa.height - h - 20;
+  }
+
+  mainWindow = new BrowserWindow({
+    width: w,
+    height: h,
+    x,
+    y,
+    minWidth: 800,
+    minHeight: 200,
+    title: 'GreatPlan - 甘特图',
+    alwaysOnTop: false,
+    transparent: true,
+    backgroundColor: '#00000000',
+    hasShadow: false,
+    acceptFirstMouse: true,
+    titleBarStyle: process.platform === 'darwin' ? 'customButtonsOnHover' : 'default',
+    webPreferences: {
+      preload: path.join(__dirname, 'preload.js'),
+      nodeIntegration: false,
+      contextIsolation: true,
+    },
+  });
+
+  if (isDev) {
+    mainWindow.loadURL('http://localhost:5173');
+    mainWindow.webContents.openDevTools();
+  } else {
+    mainWindow.loadFile(path.join(__dirname, '../dist/index.html'));
+  }
+
+  const template = [
+    {
+      label: 'GreatPlan',
+      submenu: [
+        {
+          label: '切换置顶',
+          accelerator: 'CmdOrCtrl+T',
+          click: () => {
+            const current = mainWindow.isAlwaysOnTop();
+            mainWindow.setAlwaysOnTop(!current);
+            mainWindow.webContents.send('always-on-top-changed', !current);
+          },
+        },
+        { type: 'separator' },
+        { role: 'close', label: '关闭窗口' },
+        { role: 'minimize', label: '最小化' },
+        { type: 'separator' },
+        { role: 'quit', label: '退出' },
+      ],
+    },
+    {
+      label: '编辑',
+      submenu: [
+        { role: 'undo' },
+        { role: 'redo' },
+        { type: 'separator' },
+        { role: 'cut' },
+        { role: 'copy' },
+        { role: 'paste' },
+      ],
+    },
+  ];
+
+  const menu = Menu.buildFromTemplate(template);
+  Menu.setApplicationMenu(menu);
+
+  mainWindow.on('closed', () => {
+    mainWindow = null;
+  });
+}
+
+// --------------- App Lifecycle ---------------
+
+app.whenReady().then(() => {
+  createWindow();
+  createTray();
+});
+
+app.on('window-all-closed', () => {
+  if (process.platform !== 'darwin') {
+    app.quit();
+  }
+});
+
+app.on('activate', () => {
+  if (mainWindow === null) {
+    createWindow();
+  }
+});
