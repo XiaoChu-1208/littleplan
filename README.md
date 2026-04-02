@@ -4,7 +4,18 @@ A sleek floating desktop Gantt planner that lives on your screen. Drag to plan, 
 
 一款常驻桌面的悬浮甘特计划工具。拖拽规划时间线，调色桶自由上色，长按标记完成。支持年度/月度视图、待办清单、多主题色与亮暗模式。基于 Electron + React 构建。
 
-## 快速开始
+## 下载安装
+
+前往 [Releases 页面](https://github.com/XiaoChu-1208/littleplan/releases) 下载最新版本：
+
+- **macOS**：下载 `Little Plan-x.x.x-arm64.dmg`，双击打开，将 Little Plan 拖入「应用程序」文件夹即可
+- **Windows**：下载 `Little Plan Setup x.x.x.exe`，双击运行安装程序
+
+> macOS 首次打开时如提示「无法验证开发者」，前往「系统设置 → 隐私与安全性」点击「仍要打开」即可。
+
+---
+
+## 开发者：本地运行
 
 ### 1. 安装依赖
 
