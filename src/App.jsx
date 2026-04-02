@@ -150,36 +150,8 @@ const globalStyles = `
 `;
 
 
-const NintendoStarBurst = ({ loop = false }) => {
-  const stars = useMemo(() => {
-    return Array.from({ length: 3 }).map(() => ({
-      tx: `${20 + Math.random() * 30}px`,
-      ty: `${-25 + Math.random() * 50}px`,
-      s: 0.4 + Math.random() * 0.5,
-      r: `${-90 + Math.random() * 180}deg`,
-      delay: `${Math.random() * 0.1}s`,
-    }));
-  }, []);
 
-  const animEnd = loop ? 'infinite' : 'forwards';
-
-  return (
-    <div className="absolute z-50 flex items-center justify-center pointer-events-none">
-      {stars.map((st, i) => (
-        <svg key={i} viewBox="0 0 24 24" className="absolute text-yellow-300" style={{
-          width: '24px', height: '24px', fill: 'currentColor',
-          '--tx': st.tx, '--ty': st.ty, '--s': st.s, '--r': st.r,
-          animation: `nintendo-burst-right 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275) ${st.delay} ${animEnd}`
-        }}>
-          <polygon points="12,2 15,9 22,9 17,14 18,21 12,17 6,21 7,14 2,9 9,9" />
-        </svg>
-      ))}
-      <div className="absolute w-4 h-4 bg-white rounded-full opacity-0 animate-[ping_0.2s_ease-out_forwards]" />
-    </div>
-  );
-};
-
-const LongPressAck = ({ onConfirm, holdDuration = 2000, themeColor = '#f59e0b', size = 18 }) => {
+const LongPressAck = ({ onConfirm, holdDuration = 2000, themeColor = '#f59e0b', size = 18, isLight = false }) => {
   const [state, setState] = useState('idle');
   const [progress, setProgress] = useState(0);
   const holdTimerRef = useRef(null);
@@ -258,11 +230,17 @@ const LongPressAck = ({ onConfirm, holdDuration = 2000, themeColor = '#f59e0b', 
   const circ = 2 * Math.PI * r;
   const dash = (progress / 100) * circ;
 
+  const checkColor = isLight ? '#059669' : '#10b981';
+  const ringTrackStroke = isLight ? 'rgba(0,0,0,0.2)' : 'rgba(255,255,255,0.35)';
+  const ringFill = isLight ? 'none' : 'rgba(0,0,0,0.35)';
+  const ringProgressStroke = isLight ? 'rgba(0,0,0,0.65)' : 'white';
+  const ringDropShadow = isLight ? 'drop-shadow(0 0 3px rgba(255,255,255,0.8))' : 'drop-shadow(0 0 3px rgba(0,0,0,0.5))';
+
   if (state === 'confirmed') {
     return (
       <div className="absolute right-1.5 top-1/2 -translate-y-1/2 pointer-events-none z-50 flex items-center justify-center"
         style={{ width: size, height: size }}>
-        <div style={{ animation: 'pop-in 0.35s cubic-bezier(0.175,0.885,0.32,1.275) forwards', color: '#10b981' }}>
+        <div style={{ animation: 'pop-in 0.35s cubic-bezier(0.175,0.885,0.32,1.275) forwards', color: checkColor }}>
           <svg viewBox="0 0 24 24" width={size} height={size} fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
             <polyline points="20 6 9 17 4 12" />
           </svg>
@@ -278,12 +256,12 @@ const LongPressAck = ({ onConfirm, holdDuration = 2000, themeColor = '#f59e0b', 
     >
       {state === 'holding' && (
         <div className="absolute right-1.5 top-1/2 -translate-y-1/2 pointer-events-none" style={{ width: size, height: size }}>
-          <svg width={size} height={size} viewBox="0 0 18 18" style={{ transform: 'rotate(-90deg)', filter: 'drop-shadow(0 0 3px rgba(0,0,0,0.5))' }}>
-            <circle cx="9" cy="9" r={r} fill="rgba(0,0,0,0.35)" stroke="rgba(255,255,255,0.35)" strokeWidth="2.5" />
+          <svg width={size} height={size} viewBox="0 0 18 18" style={{ transform: 'rotate(-90deg)', filter: ringDropShadow }}>
+            <circle cx="9" cy="9" r={r} fill={ringFill} stroke={ringTrackStroke} strokeWidth="2.5" />
             <circle
               cx="9" cy="9" r={r}
               fill="none"
-              stroke="white"
+              stroke={ringProgressStroke}
               strokeWidth="2.5"
               strokeLinecap="round"
               strokeDasharray={`${dash} ${circ - dash}`}
@@ -1933,6 +1911,7 @@ const SegmentBar = ({ row, seg, leftPercent, widthPercent, activeTool, paintColo
           onConfirm={() => { commitHistory(); updateSegment(row.id, seg.id, { isAcknowledged: true }); }}
           holdDuration={2000}
           themeColor={activeTheme.color}
+          isLight={isLight}
         />
       )}
 
@@ -1945,15 +1924,15 @@ const SegmentBar = ({ row, seg, leftPercent, widthPercent, activeTool, paintColo
       {/* 标题 + 状态文字 */}
       {showingNameInput ? (
         <div className="pointer-events-auto"
-          style={{ position: 'absolute', left: isNarrowMode ? 4 : 8, top: isWideMode ? 4 : 0, zIndex: 30 }}
+          style={{ position: 'absolute', left: isNarrowMode ? 4 : 8, top: isWideMode ? 4 : 0, bottom: isWideMode ? 'auto' : 0, display: 'flex', alignItems: 'center', zIndex: 30 }}
           onMouseEnter={() => setIsHoveringName(true)} onMouseLeave={() => setIsHoveringName(false)}>
           <input ref={nameInputRef} type="text" value={seg.name}
             onFocus={() => { commitHistory(); setIsNameFocused(true); }}
             onBlur={() => { setIsNameFocused(false); setIsEditing(false); }}
             onChange={(e) => updateSegment(row.id, seg.id, { name: e.target.value })}
             onKeyDown={(e) => { if (e.key === 'Enter') e.target.blur(); }}
-            className="bg-transparent font-bold text-white focus:outline-none pointer-events-auto"
-            style={{ width: `${Math.max(2, getVisualLength(seg.name) + 0.5)}ch`, fontSize: `${segmentLabelFontSize}px`, padding: 0, margin: 0, lineHeight: `${rowHeight}px`, height: isWideMode ? 'auto' : rowHeight }} />
+            className="bg-transparent font-black text-white focus:outline-none pointer-events-auto"
+            style={{ width: `${Math.max(2, getVisualLength(seg.name) + 0.5)}ch`, fontSize: `${segmentLabelFontSize}px`, padding: 0, margin: 0, lineHeight: isWideMode ? `${rowHeight}px` : 'normal', height: isWideMode ? 'auto' : 'auto', caretColor: isLight ? '#000' : '#fff' }} />
         </div>
       ) : displayedText ? (
         <div
@@ -2018,7 +1997,7 @@ const getRowBackgroundDays = (row, year, month) => {
   return { startDay, endDay };
 };
 
-const MonthlyBarInput = ({ task, rowId, isGrouped, updateTask, prog, isAck, showFieldNames, showStatusText, segmentLabelFontSize, isBarHovered, isWideMode, showRemarks, commitHistory, stickyLeftPct }) => {
+const MonthlyBarInput = ({ task, rowId, isGrouped, updateTask, prog, isAck, showFieldNames, showStatusText, segmentLabelFontSize, isBarHovered, isWideMode, showRemarks, commitHistory, stickyLeftPct, isLight }) => {
   const [editing, setEditing] = useState(false);
   const [isTextHovered, setIsTextHovered] = useState(false);
   const inputRef = useRef(null);
@@ -2042,8 +2021,8 @@ const MonthlyBarInput = ({ task, rowId, isGrouped, updateTask, prog, isAck, show
           onBlur={() => setEditing(false)}
           onChange={e => updateTask(rowId, task.id, { name: e.target.value })}
           onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); e.target.blur(); } }}
-          className="bg-transparent px-1 text-white font-bold focus:outline-none w-full"
-          style={{ fontSize: `${segmentLabelFontSize}px`, width: `${Math.max(2, getVisualLength(task.name || '') + 0.5)}ch` }}
+          className="bg-transparent px-1 text-white font-black focus:outline-none w-full"
+          style={{ fontSize: `${segmentLabelFontSize}px`, width: `${Math.max(2, getVisualLength(task.name || '') + 0.5)}ch`, caretColor: isLight ? '#000' : '#fff' }}
           onClick={e => e.stopPropagation()} />
       </div>
     );
@@ -2663,9 +2642,10 @@ const MonthlyGanttView = ({ rows, setRows, monthlyData, setMonthlyData, monthlyO
                                     onConfirm={() => { commitHistory(); updateTask(row.id, t.id, { isAcknowledged: true }, taskMonthKey); }}
                                     holdDuration={1000}
                                     themeColor={activeTheme.color}
+                                    isLight={isLight}
                                   />
                                 )}
-                                <MonthlyBarInput task={t} rowId={row.id} isGrouped={true} updateTask={(rid, tid, u) => updateTask(rid, tid, u, taskMonthKey)} prog={prog} isAck={isAck} showFieldNames={showFieldNames} showStatusText={showStatusText} showRemarks={showRemarks} segmentLabelFontSize={segmentLabelFontSize} isBarHovered={hoveredMonthlyBar && hoveredMonthlyBar.groupId === row.id && hoveredMonthlyBar.taskId === t.id} isWideMode={isWideMode} commitHistory={commitHistory} stickyLeftPct={(() => { const blp = ((tStartIdx - monthlyDayOffset) / MONTHLY_TRACK_DAYS) * 100; const bwp = ((tEndIdx - tStartIdx) / MONTHLY_TRACK_DAYS) * 100; return blp < 0 && bwp > 0 ? Math.min((-blp / bwp) * 100, 90) : 0; })()} />
+                                <MonthlyBarInput task={t} rowId={row.id} isGrouped={true} updateTask={(rid, tid, u) => updateTask(rid, tid, u, taskMonthKey)} prog={prog} isAck={isAck} showFieldNames={showFieldNames} showStatusText={showStatusText} showRemarks={showRemarks} segmentLabelFontSize={segmentLabelFontSize} isBarHovered={hoveredMonthlyBar && hoveredMonthlyBar.groupId === row.id && hoveredMonthlyBar.taskId === t.id} isWideMode={isWideMode} commitHistory={commitHistory} stickyLeftPct={(() => { const blp = ((tStartIdx - monthlyDayOffset) / MONTHLY_TRACK_DAYS) * 100; const bwp = ((tEndIdx - tStartIdx) / MONTHLY_TRACK_DAYS) * 100; return blp < 0 && bwp > 0 ? Math.min((-blp / bwp) * 100, 90) : 0; })()} isLight={isLight} />
                               </div>
                             </motion.div>
                           );
@@ -2736,9 +2716,10 @@ const MonthlyGanttView = ({ rows, setRows, monthlyData, setMonthlyData, monthlyO
                                     onConfirm={() => { commitHistory(); updateTask(null, t.id, { isAcknowledged: true }, taskMonthKey); }}
                                     holdDuration={1000}
                                     themeColor={activeTheme.color}
+                                    isLight={isLight}
                                   />
                                 )}
-                                <MonthlyBarInput task={t} rowId={null} isGrouped={false} updateTask={(rid, tid, u) => updateTask(rid, tid, u, taskMonthKey)} prog={prog} isAck={isAck} showFieldNames={showFieldNames} showStatusText={showStatusText} showRemarks={showRemarks} segmentLabelFontSize={segmentLabelFontSize} isBarHovered={hoveredMonthlyBar && hoveredMonthlyBar.groupId === null && hoveredMonthlyBar.taskId === t.id} isWideMode={isWideMode} commitHistory={commitHistory} stickyLeftPct={(() => { const blp = ((tStartIdx - monthlyDayOffset) / MONTHLY_TRACK_DAYS) * 100; const bwp = ((tEndIdx - tStartIdx) / MONTHLY_TRACK_DAYS) * 100; return blp < 0 && bwp > 0 ? Math.min((-blp / bwp) * 100, 90) : 0; })()} />
+                                <MonthlyBarInput task={t} rowId={null} isGrouped={false} updateTask={(rid, tid, u) => updateTask(rid, tid, u, taskMonthKey)} prog={prog} isAck={isAck} showFieldNames={showFieldNames} showStatusText={showStatusText} showRemarks={showRemarks} segmentLabelFontSize={segmentLabelFontSize} isBarHovered={hoveredMonthlyBar && hoveredMonthlyBar.groupId === null && hoveredMonthlyBar.taskId === t.id} isWideMode={isWideMode} commitHistory={commitHistory} stickyLeftPct={(() => { const blp = ((tStartIdx - monthlyDayOffset) / MONTHLY_TRACK_DAYS) * 100; const bwp = ((tEndIdx - tStartIdx) / MONTHLY_TRACK_DAYS) * 100; return blp < 0 && bwp > 0 ? Math.min((-blp / bwp) * 100, 90) : 0; })()} isLight={isLight} />
                               </div>
                             </div>
                           );
@@ -2857,7 +2838,6 @@ const fmtLabel = (d) => `${d.getMonth() + 1}月${d.getDate()}日`;
 
 const TodoItem = ({ it, dateKey, index, updateItem, removeItem, moveItemToNextDay, moveItemToPrevDay, lastAddedRef, activeTheme, addItem, todoItemFontSize, isShaking, isLight }) => {
   const inputRef = useRef(null);
-  const [burstKey, setBurstKey] = useState(0);
   const syncHeight = useCallback(() => {
     const el = inputRef.current;
     if (!el) return;
@@ -2899,7 +2879,6 @@ const TodoItem = ({ it, dateKey, index, updateItem, removeItem, moveItemToNextDa
       const now = new Date();
       const timeStr = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
       updateItem(dateKey, it.id, { isCompleted: true, completedAt: timeStr });
-      setBurstKey(Date.now());
     }
   };
 
@@ -2943,14 +2922,9 @@ const TodoItem = ({ it, dateKey, index, updateItem, removeItem, moveItemToNextDa
       <span className={`shrink-0 select-none w-4 pt-[2px] ${isLight ? 'text-gray-400' : 'text-white/40'}`} style={{ fontSize: `${Math.max(8, todoItemFontSize - 1)}px` }}>{index}.</span>
       <button 
         onClick={toggleCompleted} 
-        className={`shrink-0 mt-[1px] p-0.5 rounded-full transition-colors z-10 relative ${it.isCompleted ? (activeTheme.highlight.split(' ')[1] || 'text-white/70') : (isLight ? 'text-gray-400 hover:text-gray-600' : 'text-white/30 hover:text-white/70')}`}
+        className={`shrink-0 mt-[1px] p-0.5 rounded-full transition-colors z-10 relative ${it.isCompleted ? (isLight ? (activeTheme.lightHighlight.split(' ')[1] || 'text-gray-700') : (activeTheme.highlight.split(' ')[1] || 'text-white/70')) : (isLight ? 'text-gray-400 hover:text-gray-600' : 'text-white/30 hover:text-white/70')}`}
       >
         {it.isCompleted ? <CheckCircle2 className="w-3.5 h-3.5" /> : <Circle className="w-3.5 h-3.5" />}
-        {burstKey > 0 && (
-          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 pointer-events-none scale-50">
-            <NintendoStarBurst key={burstKey} />
-          </div>
-        )}
       </button>
       <textarea ref={inputRef} rows={1} wrap="soft" defaultValue={it.text} key={`${it.id}-${it.isCompleted ? 'done' : 'open'}`}
         onBlur={handleBlur}
