@@ -85,6 +85,13 @@ const hexToLightBg = (hex, intensity, alpha) => {
   return `rgba(${lr},${lg},${lb},${alpha})`;
 };
 
+const hexToDarkBg = (hex, intensity, alpha) => {
+  const r = parseInt(hex.slice(1, 3), 16);
+  const g = parseInt(hex.slice(3, 5), 16);
+  const b = parseInt(hex.slice(5, 7), 16);
+  return `rgba(${Math.round(r * intensity)},${Math.round(g * intensity)},${Math.round(b * intensity)},${alpha})`;
+};
+
 const getVisualLength = (str) => {
   let len = 0;
   for (let i = 0; i < (str?.length || 0); i++) {
@@ -968,10 +975,10 @@ const App = () => {
   const activeTheme = GLOBAL_THEMES.find(t => t.id === globalThemeId) || GLOBAL_THEMES[0];
   const isLight = colorMode === 'light';
   const C = {
-    panelBg: (a) => isLight ? hexToLightBg(activeTheme.color, 0.13, a) : `rgba(23,23,23,${a})`,
-    hudBg: (a) => isLight ? hexToLightBg(activeTheme.color, 0.13, a) : `rgba(10,10,10,${a})`,
-    popupBg: (a) => isLight ? hexToLightBg(activeTheme.color, 0.16, a) : `rgba(38,38,38,${a})`,
-    settingsBg: (a) => isLight ? hexToLightBg(activeTheme.color, 0.16, a) : `rgba(24,24,24,${a})`,
+    panelBg: (a) => isLight ? hexToLightBg(activeTheme.color, 0.13, a) : hexToDarkBg(activeTheme.color, 0.12, a),
+    hudBg: (a) => isLight ? hexToLightBg(activeTheme.color, 0.13, a) : hexToDarkBg(activeTheme.color, 0.08, a),
+    popupBg: (a) => isLight ? hexToLightBg(activeTheme.color, 0.16, a) : hexToDarkBg(activeTheme.color, 0.18, a),
+    settingsBg: (a) => isLight ? hexToLightBg(activeTheme.color, 0.16, a) : hexToDarkBg(activeTheme.color, 0.12, a),
     borderPanel: isLight ? 'border-black/10' : 'border-white/10',
     borderStrong: isLight ? 'border-black/15' : 'border-white/20',
     textPrimary: isLight ? 'text-gray-800' : 'text-slate-100',
@@ -979,7 +986,7 @@ const App = () => {
     textMuted: isLight ? 'text-gray-400' : 'text-white/40',
     btnInactive: isLight ? 'text-gray-500 hover:text-gray-700 hover:bg-black/5' : 'text-white/45 hover:text-white/85 hover:bg-white/5',
     monthHeaderBg: isLight ? 'bg-amber-100/90' : 'bg-neutral-800/80',
-    tintBlend: isLight ? 'mix-blend-multiply' : 'mix-blend-color',
+
     edgeHover: isLight ? 'hover:bg-black/5' : 'hover:bg-white/5',
     divider: isLight ? 'border-black/10' : 'border-white/10',
     scrollThumb: isLight ? 'rgba(0,0,0,0.12)' : 'rgba(255,255,255,0.15)',
@@ -1274,7 +1281,6 @@ const App = () => {
           className={`backdrop-blur-2xl border rounded-xl overflow-hidden transition-all duration-500 relative flex flex-col min-h-0 ${C.borderPanel}`}
           style={{ backgroundColor: C.panelBg(panelAlpha) }}
         >
-          {!isLight && <div className={`pointer-events-none absolute inset-0 z-[1] ${C.tintBlend} rounded-xl`} style={{ backgroundColor: activeTheme.tint }} />}
           {!isPinned && typeof window !== 'undefined' && window.electronAPI && (
             <>
               <div className={`absolute left-0 top-0 bottom-0 w-[8px] cursor-ew-resize z-[200] ${C.edgeHover} rounded-l-xl`} onPointerDown={(e) => handleWindowEdgePointerDown(e, 'w')} style={{ WebkitAppRegion: 'no-drag' }} />
@@ -1565,8 +1571,8 @@ const GanttView = ({ rows, setRows, updateSegment, activeTool, setActiveTool, pa
   const GC = {
     headerBorder: isLight ? 'border-black/15' : 'border-white/20',
     titleText: isLight ? 'text-gray-700' : 'text-white/70',
-    monthHeaderBg: isLight ? '' : 'bg-neutral-800/80',
-    headerPillStyle: isLight ? { backgroundColor: hexToLightBg(activeTheme.color, 0.30, 0.9) } : {},
+    monthHeaderBg: '',
+    headerPillStyle: isLight ? { backgroundColor: hexToLightBg(activeTheme.color, 0.30, 0.9) } : { backgroundColor: hexToDarkBg(activeTheme.color, 0.25, 0.8) },
     monthLabelText: isLight ? 'text-gray-600' : 'text-white/70',
     rowBorder: isLight ? 'border-black/8' : 'border-white/10',
     rowTitle: isLight ? 'text-gray-700' : 'text-white/60',
@@ -2092,8 +2098,8 @@ const MonthlyGanttView = ({ rows, setRows, monthlyData, setMonthlyData, monthlyO
   const isLight = colorMode === 'light';
   const MC = {
     headerBorder: isLight ? 'border-black/15' : 'border-white/20',
-    monthHeaderBg: isLight ? '' : 'bg-neutral-800/80',
-    headerPillStyle: isLight ? { backgroundColor: hexToLightBg(activeTheme.color, 0.30, 0.9) } : {},
+    monthHeaderBg: '',
+    headerPillStyle: isLight ? { backgroundColor: hexToLightBg(activeTheme.color, 0.30, 0.9) } : { backgroundColor: hexToDarkBg(activeTheme.color, 0.25, 0.8) },
     labelText: isLight ? 'text-gray-600' : 'text-white/70',
     dayText: isLight ? 'text-gray-500' : 'text-white/50',
     rowBorder: isLight ? 'border-black/5' : 'border-white/5',

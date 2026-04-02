@@ -346,12 +346,6 @@ function createWindow() {
     },
   });
 
-  if (process.platform === 'win32' && mainWindow.setBackgroundMaterial) {
-    try {
-      mainWindow.setBackgroundMaterial('acrylic');
-    } catch (e) { /* Win10 or older */ }
-  }
-
   if (process.platform === 'darwin') {
     mainWindow.setWindowButtonVisibility(false);
     app.dock.setIcon(path.join(__dirname, '../assets/icons/icon.png'));
