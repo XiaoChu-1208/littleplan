@@ -1,5 +1,5 @@
 {
-  "name": "great-plan",
+  "name": "little-plan",
   "version": "1.0.0",
   "description": "甘特图桌面悬浮应用",
   "main": "electron/main.js",
@@ -14,7 +14,7 @@
     "start": "vite build && electron ."
   },
   "build": {
-    "appId": "com.greatplan.app",
+    "appId": "com.littleplan.app",
     "productName": "Little Plan",
     "electronVersion": "33.2.0",
     "compression": "maximum",
