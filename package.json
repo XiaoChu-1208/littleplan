@@ -18,9 +18,12 @@
     "productName": "Little Plan",
     "electronVersion": "33.2.0",
     "compression": "maximum",
+    "afterPack": "./scripts/afterPack.js",
     "mac": {
       "icon": "assets/icons/icon.icns",
       "category": "public.app-category.productivity",
+      "hardenedRuntime": false,
+      "gatekeeperAssess": false,
       "target": [
         {
           "target": "dmg",
